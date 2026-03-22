@@ -1,0 +1,16 @@
+{
+  "plugin.name": "Welcome Overview",
+  "plugin.description": "Overview of the desktop shell, platform services, and plugin architecture.",
+  "plugin.category": "General",
+  "title": "What Micro Toolkit already solves",
+  "body": "Micro Toolkit now owns both the plugin shell and the app platform layer: it discovers plugin metadata at startup, imports modules on demand, caches pages after first use, and provides shared services for workflows, settings, themes, shortcuts, startup behavior, and language switching.",
+  "card.discovery.title": "Lazy discovery",
+  "card.discovery.body": "The sidebar is generated from AST metadata, so heavy libraries stay unloaded.",
+  "card.pages.title": "Lazy pages",
+  "card.pages.body": "Each tool widget is created only when you open it for the first time.",
+  "card.services.title": "Shared services",
+  "card.services.body": "Plugins receive config, logging, session history, workflows, commands, and background workers.",
+  "card.platform.title": "Platform features",
+  "card.platform.body": "Themes, RTL-aware language switching, tray behavior, startup integration, and shortcuts now live in the app core.",
+  "foot": "Next step: keep refining the desktop UX and add more headless command support to plugins that need deeper workflow and CLI automation."
+}

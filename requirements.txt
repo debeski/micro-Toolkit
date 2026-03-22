@@ -1,0 +1,10 @@
+pandas
+openpyxl
+PySide6
+Pillow
+pillow-heif
+python-dateutil
+keyboard
+PyPDF2
+psutil
+python-docx

@@ -1,0 +1,17 @@
+{
+    "minimize_to_tray": true,
+    "close_to_tray": true,
+    "run_on_startup": false,
+    "start_minimized": false,
+    "appearance_mode": "Dark",
+    "grayscale": false,
+    "invert_colors": false,
+    "high_contrast": false,
+    "ui_scaling": 1.0,
+    "default_output_path": "",
+    "language": "ar",
+    "hotkeys": {
+        "clipboard_panel": "ctrl+shift+v"
+    },
+    "default_tab": "clip_manager"
+}

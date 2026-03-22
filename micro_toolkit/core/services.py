@@ -1,0 +1,445 @@
+from __future__ import annotations
+
+import shutil
+import sys
+from datetime import datetime
+from pathlib import Path
+
+from PySide6.QtCore import QObject, QThreadPool, Signal, Slot
+
+from micro_toolkit.core.app_config import AppConfig
+from micro_toolkit.core.autostart import AutostartManager
+from micro_toolkit.core.clipboard_quick_panel import ClipboardQuickPanelController
+from micro_toolkit.core.commands import CommandRegistry
+from micro_toolkit.core.command_runtime import serialize_command_result
+from micro_toolkit.core.elevation import ElevationManager
+from micro_toolkit.core.hotkey_helper import HotkeyHelperManager
+from micro_toolkit.core.i18n import TranslationManager
+from micro_toolkit.core.plugin_manager import PluginManager
+from micro_toolkit.core.plugin_packages import PluginPackageManager
+from micro_toolkit.core.plugin_state import PluginStateManager
+from micro_toolkit.core.privileged_broker import PrivilegedBrokerManager
+from micro_toolkit.core.session_manager import SessionManager
+from micro_toolkit.core.shortcuts import ShortcutManager
+from micro_toolkit.core.theme import ThemeManager
+from micro_toolkit.core.tray import TrayManager
+from micro_toolkit.core.workflows import WorkflowManager
+from micro_toolkit.core.workers import Worker
+
+
+class AppLogger(QObject):
+    message_logged = Signal(str, str, str)
+    status_changed = Signal(str)
+
+    def __init__(self):
+        super().__init__()
+        self._history: list[tuple[str, str, str]] = []
+
+    @Slot(str, str)
+    def log(self, message: str, level: str = "INFO") -> None:
+        timestamp = datetime.now().strftime("%H:%M:%S")
+        self._history.append((timestamp, level, message))
+        self.message_logged.emit(timestamp, level, message)
+        self.status_changed.emit(message)
+
+    def set_status(self, message: str) -> None:
+        self.status_changed.emit(message)
+
+    def history(self) -> list[tuple[str, str, str]]:
+        return list(self._history)
+
+
+class AppServices(QObject):
+    def __init__(self):
+        super().__init__()
+        self.app_root = Path(__file__).resolve().parents[1]
+        self.runtime_root = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else self.app_root.parent
+        self.data_root = self.runtime_root / "data"
+        self.assets_root = self.app_root / "assets"
+        self.locales_root = self.app_root / "i18n"
+        self.plugins_root = self.app_root / "plugins"
+        self.custom_plugins_root = self.data_root / "plugins"
+        self.output_root = self.runtime_root / "output"
+        self.workflows_root = self.data_root / "workflows"
+        self.config_path = self.data_root / "micro_toolkit_config.json"
+        self.database_path = self.data_root / "micro_toolkit.db"
+        self.plugin_state_path = self.data_root / "plugin_state.json"
+        self._migrate_legacy_runtime_files()
+        self.data_root.mkdir(parents=True, exist_ok=True)
+        self.output_root.mkdir(parents=True, exist_ok=True)
+        self.custom_plugins_root.mkdir(parents=True, exist_ok=True)
+        self.config = AppConfig(self.config_path, self.output_root)
+        self.session_manager = SessionManager(self.database_path)
+        self.logger = AppLogger()
+        self.thread_pool = QThreadPool.globalInstance()
+        self.application = None
+        self.main_window = None
+        self.hotkey_helper_manager = HotkeyHelperManager(self.data_root, self.logger)
+        self.privileged_broker = PrivilegedBrokerManager(
+            self.data_root,
+            self.output_root,
+            self.assets_root,
+            self.plugins_root,
+            self.custom_plugins_root,
+            self.plugin_state_path,
+            self.logger,
+        )
+        self.plugin_state_manager = PluginStateManager(self.plugin_state_path)
+        self.plugin_manager = PluginManager(self.plugins_root, self.custom_plugins_root, self.plugin_state_manager)
+        self.plugin_package_manager = PluginPackageManager(
+            self.plugin_manager,
+            self.custom_plugins_root,
+            self.plugin_state_manager,
+        )
+        self.command_registry = CommandRegistry()
+        self._plugin_commands_registered = False
+        self.elevation_manager = ElevationManager()
+        self.i18n = TranslationManager(self.config, self.locales_root)
+        self.theme_manager = ThemeManager(self.config, self.assets_root)
+        self.autostart_manager = AutostartManager()
+        self.workflow_manager = WorkflowManager(self.workflows_root)
+        self.shortcut_manager = ShortcutManager(self.config, self.logger, helper_manager=self.hotkey_helper_manager)
+        self.clipboard_quick_panel = ClipboardQuickPanelController(self)
+        self.tray_manager = TrayManager(self)
+        self.reset_command_registry()
+
+    def resource_path(self, relative_path: str) -> Path:
+        return self.assets_root / relative_path
+
+    def plugin_text(self, plugin_id: str, key: str, default: str | None = None, **kwargs) -> str:
+        return self.plugin_manager.plugin_text(plugin_id, self.i18n.current_language(), key, default, **kwargs)
+
+    def attach_application(self, application) -> None:
+        self.application = application
+        self.i18n.apply(application)
+        self.theme_manager.apply(application)
+
+    def attach_main_window(self, main_window) -> None:
+        self.main_window = main_window
+        self.shortcut_manager.attach(main_window)
+        self.tray_manager.attach(main_window)
+
+    def log(self, message: str, level: str = "INFO") -> None:
+        self.logger.log(message, level)
+
+    def record_run(self, tool_id: str, status: str, details: str = "") -> None:
+        self.session_manager.log_run(tool_id, status, details)
+
+    def request_privileged(self, capability_id: str, payload: dict[str, object] | None = None, *, timeout_seconds: float = 20.0):
+        return self.privileged_broker.request(capability_id, payload, timeout_seconds=timeout_seconds)
+
+    def default_output_path(self) -> Path:
+        configured = self.config.get("default_output_path")
+        if configured:
+            output_path = Path(configured)
+            output_path.mkdir(parents=True, exist_ok=True)
+            return output_path
+        self.output_root.mkdir(parents=True, exist_ok=True)
+        return self.output_root
+
+    def set_theme(self, mode: str) -> str:
+        self.theme_manager.set_mode(mode)
+        if self.application is not None:
+            self.theme_manager.apply(self.application)
+        return self.theme_manager.current_mode()
+
+    def set_language(self, language: str) -> str:
+        self.i18n.set_language(language)
+        if self.application is not None:
+            self.i18n.apply(self.application)
+        return self.i18n.current_language()
+
+    def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> None:
+        self.plugin_state_manager.set_enabled(plugin_id, enabled)
+        self.reload_plugins()
+
+    def set_plugin_hidden(self, plugin_id: str, hidden: bool) -> None:
+        self.plugin_state_manager.set_hidden(plugin_id, hidden)
+        self.reload_plugins()
+
+    def reset_command_registry(self) -> None:
+        self.command_registry.clear()
+        self._plugin_commands_registered = False
+        self.register_core_commands()
+
+    def ensure_plugin_commands_registered(self) -> None:
+        if self._plugin_commands_registered:
+            return
+
+        from micro_toolkit.core.builtin_tool_commands import register_builtin_tool_commands
+
+        register_builtin_tool_commands(self.command_registry, self)
+
+        for spec in self.plugin_manager.discover_plugins():
+            try:
+                plugin = self.plugin_manager.load_plugin(spec.plugin_id)
+                plugin.register_commands(self.command_registry, self)
+            except Exception as exc:
+                self.log(f"Skipping command registration for plugin '{spec.plugin_id}': {exc}", "WARNING")
+
+        self._plugin_commands_registered = True
+
+    def serialize_result(self, payload: object):
+        return serialize_command_result(payload)
+
+    def _migrate_legacy_runtime_files(self) -> None:
+        self.data_root.mkdir(parents=True, exist_ok=True)
+        legacy_data_root = self.app_root / "data"
+        legacy_pairs = [
+            (self.data_root / "qt_toolkit_config.json", self.config_path),
+            (self.data_root / "micro_toolkit_qt.db", self.database_path),
+            (legacy_data_root / "micro_toolkit_config.json", self.config_path),
+            (legacy_data_root / "micro_toolkit.db", self.database_path),
+            (legacy_data_root / "plugin_state.json", self.plugin_state_path),
+        ]
+        for legacy_path, target_path in legacy_pairs:
+            if legacy_path.exists() and not target_path.exists():
+                try:
+                    shutil.move(str(legacy_path), str(target_path))
+                except Exception:
+                    pass
+        legacy_plugins_root = legacy_data_root / "plugins"
+        if legacy_plugins_root.exists() and not self.custom_plugins_root.exists():
+            try:
+                shutil.move(str(legacy_plugins_root), str(self.custom_plugins_root))
+            except Exception:
+                pass
+        legacy_workflows_root = legacy_data_root / "workflows"
+        if legacy_workflows_root.exists() and not self.workflows_root.exists():
+            try:
+                shutil.move(str(legacy_workflows_root), str(self.workflows_root))
+            except Exception:
+                pass
+
+    def reload_plugins(self) -> None:
+        self.plugin_manager.invalidate_cache(clear_instances=True)
+        self.reset_command_registry()
+        if self.main_window is not None:
+            self.main_window.reload_plugin_catalog(preferred_plugin_id="settings_center")
+
+    def register_core_commands(self) -> None:
+        self.command_registry.register(
+            "plugins.list",
+            "List Plugins",
+            "Return all discovered plugins.",
+            lambda: [
+                {
+                    "plugin_id": spec.plugin_id,
+                    "name": spec.localized_name(self.i18n.current_language()),
+                    "category": spec.localized_category(self.i18n.current_language()),
+                    "standalone": spec.standalone,
+                    "enabled": spec.enabled,
+                    "hidden": spec.hidden,
+                    "source_type": spec.source_type,
+                }
+                for spec in self.plugin_manager.discover_plugins(include_disabled=True)
+            ],
+        )
+        self.command_registry.register(
+            "plugins.info",
+            "Plugin Details",
+            "Return metadata for one plugin.",
+            lambda plugin_id: self._plugin_info(plugin_id),
+        )
+        self.command_registry.register(
+            "broker.elevated.capabilities",
+            "Elevated Broker Capabilities",
+            "Return the elevated broker capability catalog.",
+            lambda: self.privileged_broker.list_capabilities(),
+        )
+        self.command_registry.register(
+            "history.show",
+            "History",
+            "Return recent session history.",
+            lambda limit=20: self.session_manager.get_history(limit=max(1, int(limit))),
+        )
+        self.command_registry.register(
+            "app.set_theme",
+            "Set Theme",
+            "Switch theme mode.",
+            lambda mode: {"theme": self.set_theme(mode)},
+        )
+        self.command_registry.register(
+            "app.set_language",
+            "Set Language",
+            "Switch application language and layout direction.",
+            lambda language: {"language": self.set_language(language)},
+        )
+        self.command_registry.register(
+            "app.focus_search",
+            "Focus Search",
+            "Focus the sidebar filter box.",
+            lambda: self._require_window().focus_search(),
+        )
+        self.command_registry.register(
+            "app.toggle_activity",
+            "Toggle Activity",
+            "Show or hide the activity dock.",
+            lambda: self._require_window().toggle_activity_dock(),
+        )
+        self.command_registry.register(
+            "app.restore_window",
+            "Restore Window",
+            "Restore the main window.",
+            lambda: self._require_window().restore_from_tray(),
+        )
+        self.command_registry.register(
+            "app.open_plugin",
+            "Open Plugin",
+            "Open a plugin page in the shell.",
+            lambda plugin_id: self._command_open_plugin(plugin_id),
+        )
+        self.command_registry.register(
+            "app.show_settings",
+            "Open Settings",
+            "Open the settings page.",
+            lambda: self._command_open_plugin("settings_center"),
+        )
+        self.command_registry.register(
+            "app.show_workflows",
+            "Open Workflows",
+            "Open the workflows page.",
+            lambda: self._command_open_plugin("workflow_studio"),
+        )
+        self.command_registry.register(
+            "app.show_clipboard",
+            "Open Clipboard",
+            "Open the clipboard page.",
+            lambda: self._command_open_plugin("clip_manager"),
+        )
+        self.command_registry.register(
+            "app.show_clipboard_quick_panel",
+            "Toggle Clipboard Quick Panel",
+            "Show or hide the quick clipboard history panel.",
+            lambda: self._toggle_clipboard_quick_panel(),
+        )
+        self.command_registry.register(
+            "app.start_hotkey_helper",
+            "Start Hotkey Helper",
+            "Start the privileged hotkey helper for this session.",
+            lambda: self._start_hotkey_helper(),
+        )
+        self.command_registry.register(
+            "app.stop_hotkey_helper",
+            "Stop Hotkey Helper",
+            "Stop the privileged hotkey helper for this session.",
+            lambda: self._stop_hotkey_helper(),
+        )
+        self.command_registry.register(
+            "app.start_elevated_broker",
+            "Start Elevated Broker",
+            "Start the capability-based elevated broker for this session.",
+            lambda: self._start_privileged_broker(),
+        )
+        self.command_registry.register(
+            "app.stop_elevated_broker",
+            "Stop Elevated Broker",
+            "Stop the capability-based elevated broker for this session.",
+            lambda: self._stop_privileged_broker(),
+        )
+        self.command_registry.register(
+            "app.restart_elevated",
+            "Restart Elevated",
+            "Relaunch the app with elevated privileges when the platform supports it.",
+            lambda: self._restart_elevated(),
+        )
+
+    def run_task(
+        self,
+        task_fn,
+        *,
+        on_result=None,
+        on_error=None,
+        on_finished=None,
+        on_progress=None,
+    ) -> Worker:
+        worker = Worker(task_fn)
+        worker.signals.log.connect(self.logger.log)
+        if on_result is not None:
+            worker.signals.result.connect(on_result)
+        if on_error is not None:
+            worker.signals.error.connect(on_error)
+        else:
+            worker.signals.error.connect(self._default_worker_error)
+        if on_finished is not None:
+            worker.signals.finished.connect(on_finished)
+        if on_progress is not None:
+            worker.signals.progress.connect(on_progress)
+        self.thread_pool.start(worker)
+        return worker
+
+    @Slot(object)
+    def _default_worker_error(self, payload: object) -> None:
+        if isinstance(payload, dict):
+            message = payload.get("message", "Unknown worker error")
+            trace = payload.get("traceback", "")
+            self.logger.log(message, "ERROR")
+            if trace:
+                self.logger.log(trace, "ERROR")
+            return
+        self.logger.log(str(payload), "ERROR")
+
+    def _plugin_info(self, plugin_id: str) -> dict:
+        spec = self.plugin_manager.get_spec(plugin_id)
+        if spec is None:
+            raise KeyError(f"Unknown plugin id: {plugin_id}")
+        return {
+            "plugin_id": spec.plugin_id,
+            "name": spec.localized_name(self.i18n.current_language()),
+            "description": spec.localized_description(self.i18n.current_language()),
+            "category": spec.localized_category(self.i18n.current_language()),
+            "version": spec.version,
+            "standalone": spec.standalone,
+            "enabled": spec.enabled,
+            "hidden": spec.hidden,
+            "source_type": spec.source_type,
+            "file_path": str(spec.file_path),
+        }
+
+    def _command_open_plugin(self, plugin_id: str):
+        window = self._require_window()
+        window.open_plugin(plugin_id)
+        return {"plugin_id": plugin_id}
+
+    def _toggle_clipboard_quick_panel(self):
+        self._require_window()
+        self.clipboard_quick_panel.toggle()
+        return {"visible": True}
+
+    def _restart_elevated(self):
+        success, message = self.elevation_manager.relaunch_elevated()
+        if not success:
+            raise RuntimeError(message)
+        if self.application is not None:
+            self.application.quit()
+        return {"restarted": True, "message": message}
+
+    def _start_hotkey_helper(self):
+        bindings = self.shortcut_manager.global_binding_sequences()
+        success, message = self.hotkey_helper_manager.enable_for_session(bindings)
+        self.shortcut_manager.apply()
+        if not success:
+            raise RuntimeError(message)
+        return {"started": True, "message": message}
+
+    def _stop_hotkey_helper(self):
+        self.hotkey_helper_manager.disable_for_session()
+        self.shortcut_manager.apply()
+        return {"stopped": True, "message": "Hotkey helper stopped."}
+
+    def _start_privileged_broker(self):
+        success, message = self.privileged_broker.start()
+        if not success:
+            raise RuntimeError(message)
+        return {"started": True, "message": message}
+
+    def _stop_privileged_broker(self):
+        success, message = self.privileged_broker.stop()
+        if not success:
+            raise RuntimeError(message)
+        return {"stopped": True, "message": message}
+
+    def _require_window(self):
+        if self.main_window is None:
+            raise RuntimeError("This command requires the GUI main window.")
+        return self.main_window

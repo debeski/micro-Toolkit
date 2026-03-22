@@ -1,0 +1,58 @@
+MICROSYS NON-COMMERCIAL LICENSE
+
+Copyright (c) 2026 DeBeski
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, and/or sublicense copies
+of the Software, subject to the following conditions:
+
+1. NON-COMMERCIAL USE ONLY: The Software is provided strictly for non-commercial
+   and free use. You may use this Software in your own projects as long as those
+   projects are entirely free of charge and not intended for commercial gain.
+   
+2. NO PROFIT: Any attempt to make a profit using this Software, either directly
+   by selling the Software (as a whole or in part), or indirectly by incorporating 
+   it into a commercial product or service, is strictly prohibited and illegal. 
+   Violators will be prosecuted to the fullest extent of the law.
+
+3. ATTRIBUTION AND CREDIT: The user of this Software must provide clear and 
+   visible credit to the "microsys" application and its original author (DeBeski) 
+   in any project or application that utilizes this Software. This credit must 
+   include a direct link to the official repository:
+   https://github.com/debeski/django-microsys
+   
+   This attribution must be prominently displayed in the project's documentation, 
+   about page, or other appropriate user-facing locations.
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+---
+
+THIRD-PARTY PACKAGES AND DEPENDENCIES
+
+This Software utilizes the following open-source packages. Please refer to
+their respective repository and licenses for their terms of use:
+
+- Python (3.11+) - Python Software Foundation License
+- PySide6 - Qt for Python - LGPL v3 "Use in closed-source is allowed with dynamic linking"
+- PyInstaller - GPL v2 "Bootloader Exception allows use under any license"
+- psutil - BSD-3-Clause License
+- Pillow - HPND (Pillow License)
+- pillow-heif - MIT License
+- openpyxl - MIT License
+- pandas - BSD-3-Clause License
+- python-dateutil - BSD-3-Clause License
+- PyPDF2 - BSD-3-Clause
+- keyboard - MIT License
+- python-docx - MIT License

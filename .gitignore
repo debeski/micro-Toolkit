@@ -1,0 +1,34 @@
+# Ignore Python and OS bytecode files
+**/__pycache__/
+*.pyc
+*.pyo
+**/.DS_Store
+desktop.ini
+desktop.inf
+autorun.ini
+autorun.inf
+
+# Ignore app directories
+logs/
+media/
+staticfiles/
+imports/
+.backups/
+.secrets/
+.xpose/
+venv/
+dist/
+*.egg-info/
+build/
+output/
+data/
+
+# Ignore celery-related files
+celerybeat-schedule
+celerybeat-schedule-shm
+celerybeat-schedule-wal
+
+# Ignore Sensetive Secrets
+.env
+.key
+startx.sh
