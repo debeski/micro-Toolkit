@@ -6,8 +6,17 @@
     "custom"
   ],
   "files": {
+    "about_center.py": {
+      "sha256": "e255d1582cdc018f423352c6e39db8abd2f0662f4fa4d5f4d6b138e09c063075",
+      "plugins": [
+        {
+          "plugin_id": "about_center",
+          "class_name": "AboutCenterPlugin"
+        }
+      ]
+    },
     "clipboard_manager.py": {
-      "sha256": "cc6f3d9aa6faf8ccd84b7acfd0b6c1a3b4f69787cc4f00209d9f4693c3f5443c",
+      "sha256": "58ff1cbdc6c03719ef86eee51a53ace8fd46ba8764fd3b2096ea86d5bb2f0f57",
       "plugins": [
         {
           "plugin_id": "clip_manager",
@@ -97,7 +106,7 @@
       ]
     },
     "general/welcome.py": {
-      "sha256": "79761688a751b1c130a4793aabd206a7292dc178d43e7775be46425cfa80a5bd",
+      "sha256": "cc163f3397c889d087c6283c0a61baec4ee436d1b77b494794d90351de1264f5",
       "plugins": [
         {
           "plugin_id": "welcome_overview",
@@ -115,7 +124,7 @@
       ]
     },
     "it_tools/network_scanner.py": {
-      "sha256": "6980d019f97ee0429133cde1ab8920799daa0eef5a20692a2fb30c9cc30aa7d2",
+      "sha256": "6a126a2f2e19b9f9bb9d5eba57fe99439b757941381f43ffcda4471f371378ed",
       "plugins": [
         {
           "plugin_id": "net_scan",
@@ -133,11 +142,29 @@
       ]
     },
     "it_tools/system_audit.py": {
-      "sha256": "63816bfa7dfcb6f9385df4f1264f38168fb8e77f40f78e14de256d62c049560b",
+      "sha256": "9d94ad191d9473d7b201be23e89bab082eeea9c1120dc9a0dfc8d4fb0c2d26ae",
       "plugins": [
         {
           "plugin_id": "sys_audit",
           "class_name": "SystemAuditPlugin"
+        }
+      ]
+    },
+    "it_tools/wifi_profiles.py": {
+      "sha256": "54eeffdd837772eb3851e2424fa87b92d7429caa617a1974a011e9015b6285d3",
+      "plugins": [
+        {
+          "plugin_id": "wifi_profiles",
+          "class_name": "WifiProfilesPlugin"
+        }
+      ]
+    },
+    "it_tools/wifi_revealer.py": {
+      "sha256": "dbcbe697173968f94afbd2e9c26dcef26fb61be40f5898274b6aaf53dceb501d",
+      "plugins": [
+        {
+          "plugin_id": "wifi_revealer",
+          "class_name": "WifiRevealerPlugin"
         }
       ]
     },
@@ -196,7 +223,7 @@
       ]
     },
     "settings_center.py": {
-      "sha256": "06db476d36900a5bd0cea9ccf83440d11d445c7f76dd835ff992c7bf84e65e03",
+      "sha256": "26a5404c8644817f6ff87cf6393295f10abc68d99f7def31a537a537e6185f13",
       "plugins": [
         {
           "plugin_id": "settings_center",
@@ -205,7 +232,7 @@
       ]
     },
     "workflow_studio.py": {
-      "sha256": "92415d611301533fd39756f60dbb119c4265fc332118522b026127e181061607",
+      "sha256": "6b6a6f580eb6bb9f7bce15b4bc237c91160ee31e931b108b5a3c80151360c4d2",
       "plugins": [
         {
           "plugin_id": "workflow_studio",

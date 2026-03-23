@@ -81,7 +81,7 @@ class NetworkScannerPlugin(QtPlugin):
     plugin_id = "net_scan"
     name = "Network Port Scanner"
     description = "Scan a host for open TCP ports and save a plain-text report to the default output path."
-    category = "IT Toolkit"
+    category = "Networks"
 
     def create_widget(self, services) -> QWidget:
         return NetworkScannerPage(services, self.plugin_id)

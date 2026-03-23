@@ -20,7 +20,7 @@ from micro_toolkit.core.plugin_manager import PluginManager
 from micro_toolkit.core.plugin_packages import PluginPackageManager
 from micro_toolkit.core.plugin_state import PluginStateManager
 from micro_toolkit.core.session_manager import SessionManager
-from micro_toolkit.core.shell_registry import DASHBOARD_PLUGIN_ID, NON_SIDEBAR_PLUGIN_IDS
+from micro_toolkit.core.shell_registry import DASHBOARD_PLUGIN_ID, NON_SIDEBAR_PLUGIN_IDS, SYSTEM_COMPONENT_PLUGIN_IDS, is_system_component
 from micro_toolkit.core.shortcuts import ShortcutManager
 from micro_toolkit.core.theme import ThemeManager
 from micro_toolkit.core.tray import TrayManager
@@ -126,6 +126,8 @@ class AppServices(QObject):
         if spec is None:
             return str(spec_or_plugin_id)
         default_name = spec.localized_name(self.i18n.current_language())
+        if is_system_component(spec.plugin_id):
+            return default_name
         if not spec.allow_name_override:
             return default_name
         overrides = self.config.get("plugin_overrides") or {}
@@ -138,6 +140,8 @@ class AppServices(QObject):
         return custom_name or default_name
 
     def plugin_icon_override(self, spec: PluginSpec) -> str:
+        if is_system_component(spec.plugin_id):
+            return ""
         if not spec.allow_icon_override:
             return ""
         overrides = self.config.get("plugin_overrides") or {}
@@ -149,6 +153,8 @@ class AppServices(QObject):
         return str(plugin_override.get("icon", "")).strip()
 
     def plugin_override(self, plugin_id: str) -> dict[str, str]:
+        if is_system_component(plugin_id):
+            return {"display_name": "", "icon": ""}
         overrides = self.config.get("plugin_overrides") or {}
         if not isinstance(overrides, dict):
             return {"display_name": "", "icon": ""}
@@ -161,6 +167,8 @@ class AppServices(QObject):
         }
 
     def set_plugin_override(self, plugin_id: str, *, display_name: str = "", icon: str = "") -> dict[str, str]:
+        if is_system_component(plugin_id):
+            return {"display_name": "", "icon": ""}
         overrides = self.config.get("plugin_overrides") or {}
         if not isinstance(overrides, dict):
             overrides = {}
@@ -226,12 +234,23 @@ class AppServices(QObject):
         return self.i18n.current_language()
 
     def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> None:
+        if is_system_component(plugin_id):
+            return
         self.plugin_state_manager.set_enabled(plugin_id, enabled)
         self.reload_plugins()
 
     def set_plugin_hidden(self, plugin_id: str, hidden: bool) -> None:
+        if is_system_component(plugin_id):
+            return
         self.plugin_state_manager.set_hidden(plugin_id, hidden)
         self.reload_plugins()
+
+    def manageable_plugin_specs(self, *, include_disabled: bool = False):
+        return [
+            spec
+            for spec in self.plugin_manager.discover_plugins(include_disabled=include_disabled)
+            if spec.plugin_id not in SYSTEM_COMPONENT_PLUGIN_IDS
+        ]
 
     def pinnable_plugin_specs(self):
         return [

@@ -8,6 +8,7 @@ from pathlib import Path
 
 from micro_toolkit.core.plugin_manager import PluginManager, PluginSpec
 from micro_toolkit.core.plugin_security import scan_plugin_path
+from micro_toolkit.core.shell_registry import is_system_component
 
 
 class PluginPackageManager:
@@ -116,6 +117,9 @@ class PluginPackageManager:
         destination = Path(destination)
         if not specs:
             raise ValueError("Select at least one plugin to export.")
+        blocked = [spec.plugin_id for spec in specs if is_system_component(spec.plugin_id)]
+        if blocked:
+            raise ValueError("System components cannot be exported as plugins.")
         destination.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.TemporaryDirectory() as temp_dir:
             temp_root = Path(temp_dir)

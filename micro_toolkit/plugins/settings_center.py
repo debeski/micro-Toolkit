@@ -7,12 +7,16 @@ from PySide6.QtGui import QColor
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDialog,
     QDoubleSpinBox,
     QFileDialog,
     QFormLayout,
     QFrame,
+    QHeaderView,
     QHBoxLayout,
     QLabel,
+    QListWidget,
+    QListWidgetItem,
     QLineEdit,
     QMessageBox,
     QPushButton,
@@ -28,6 +32,102 @@ from PySide6.QtWidgets import (
 from micro_toolkit.core.icon_registry import icon_choices, icon_from_name
 from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
 from micro_toolkit.core.plugin_api import QtPlugin
+
+
+class IconPickerDialog(QDialog):
+    def __init__(self, parent: QWidget, options: list[tuple[str, str, object]], current_value: str = ""):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.WindowType.Popup | Qt.WindowType.FramelessWindowHint)
+        self.setModal(True)
+        self._selected_icon = str(current_value or "").strip()
+        self._options = options
+        self._build_ui()
+        self._populate()
+
+    def _build_ui(self) -> None:
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(8, 8, 8, 8)
+        layout.setSpacing(8)
+
+        self.grid = QListWidget()
+        self.grid.setViewMode(QListWidget.ViewMode.IconMode)
+        self.grid.setResizeMode(QListWidget.ResizeMode.Adjust)
+        self.grid.setMovement(QListWidget.Movement.Static)
+        self.grid.setWrapping(True)
+        self.grid.setUniformItemSizes(True)
+        self.grid.setSpacing(8)
+        self.grid.setIconSize(QSize(22, 22))
+        self.grid.setGridSize(QSize(86, 62))
+        self.grid.setWordWrap(True)
+        self.grid.itemClicked.connect(self._choose_item)
+        self.grid.itemDoubleClicked.connect(self._choose_item)
+        layout.addWidget(self.grid)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(6)
+        clear_button = QPushButton("Default")
+        clear_button.clicked.connect(self._clear_selection)
+        actions.addWidget(clear_button)
+        close_button = QPushButton("Close")
+        close_button.clicked.connect(self.reject)
+        actions.addWidget(close_button)
+        layout.addLayout(actions)
+        self.resize(420, 320)
+
+    def _populate(self) -> None:
+        default_item = QListWidgetItem("Default")
+        default_item.setData(Qt.ItemDataRole.UserRole, "")
+        self.grid.addItem(default_item)
+        if not self._selected_icon:
+            self.grid.setCurrentItem(default_item)
+
+        for icon_id, label, icon in self._options:
+            item = QListWidgetItem(icon, label)
+            item.setTextAlignment(Qt.AlignmentFlag.AlignCenter)
+            item.setData(Qt.ItemDataRole.UserRole, icon_id)
+            self.grid.addItem(item)
+            if icon_id == self._selected_icon:
+                self.grid.setCurrentItem(item)
+
+    def _choose_item(self, item: QListWidgetItem) -> None:
+        self._selected_icon = str(item.data(Qt.ItemDataRole.UserRole) or "").strip()
+        self.accept()
+
+    def _clear_selection(self) -> None:
+        self._selected_icon = ""
+        self.accept()
+
+    def selected_icon(self) -> str:
+        return self._selected_icon
+
+
+class IconPickerButton(QToolButton):
+    def __init__(self, page: "SettingsCenterPage", initial_value: str = ""):
+        super().__init__(page)
+        self._page = page
+        self._selected_icon = str(initial_value or "").strip()
+        self.setAutoRaise(False)
+        self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
+        self.setIconSize(QSize(18, 18))
+        self.setFixedSize(32, 30)
+        self.clicked.connect(self._open_picker)
+        self._refresh()
+
+    def _refresh(self) -> None:
+        icon = icon_from_name(self._selected_icon, self._page) if self._selected_icon else None
+        self.setIcon(icon or icon_from_name("plugin", self._page) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
+        self.setToolTip(self._page._pt("plugins.row.icon_picker", "Choose an icon"))
+
+    def _open_picker(self) -> None:
+        dialog = IconPickerDialog(self, self._page._icon_options(), self._selected_icon)
+        anchor = self.mapToGlobal(self.rect().bottomLeft())
+        dialog.move(anchor.x(), anchor.y() + 4)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            self._selected_icon = dialog.selected_icon()
+            self._refresh()
+
+    def selected_icon(self) -> str:
+        return self._selected_icon
 
 
 class SettingsCenterPlugin(QtPlugin):
@@ -223,7 +323,11 @@ class SettingsCenterPage(QWidget):
         self.plugins_table.setAlternatingRowColors(True)
         self.plugins_table.verticalHeader().setVisible(False)
         self.plugins_table.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
-        self.plugins_table.horizontalHeader().setStretchLastSection(True)
+        header = self.plugins_table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        header.setSectionResizeMode(10, QHeaderView.ResizeMode.Stretch)
         layout.addWidget(self.plugins_table, 1)
 
         actions = QHBoxLayout()
@@ -287,7 +391,7 @@ class SettingsCenterPage(QWidget):
     def _populate_plugin_table(self) -> None:
         self._building_plugin_table = True
         try:
-            specs = self.services.plugin_manager.discover_plugins(include_disabled=True)
+            specs = self.services.manageable_plugin_specs(include_disabled=True)
             self.plugin_row_map = {}
             self.plugins_table.setRowCount(len(specs))
             self.plugins_table.setHorizontalHeaderLabels(
@@ -310,8 +414,10 @@ class SettingsCenterPage(QWidget):
                 self.plugin_row_map[spec.plugin_id] = row_index
 
                 self.plugins_table.setCellWidget(row_index, 0, self._row_action_widget(spec, selected=False))
+                self.plugins_table.removeCellWidget(row_index, 1)
 
                 icon_item = QTableWidgetItem(self._icon_display_text(spec))
+                icon_item.setIcon(self._icon_display_icon(spec) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
                 icon_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self.plugins_table.setItem(row_index, 1, icon_item)
 
@@ -330,7 +436,7 @@ class SettingsCenterPage(QWidget):
 
                 trusted_item = QTableWidgetItem()
                 trusted_flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
-                if spec.source_type != "builtin" and spec.plugin_id != "settings_center":
+                if spec.source_type != "builtin":
                     trusted_item.setFlags(trusted_flags)
                 else:
                     trusted_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
@@ -340,18 +446,12 @@ class SettingsCenterPage(QWidget):
                 enabled_item = QTableWidgetItem()
                 enabled_flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
                 hidden_flags = Qt.ItemFlag.ItemIsEnabled | Qt.ItemFlag.ItemIsUserCheckable
-                if spec.plugin_id != "settings_center":
-                    enabled_item.setFlags(enabled_flags)
-                else:
-                    enabled_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                enabled_item.setFlags(enabled_flags)
                 enabled_item.setCheckState(Qt.CheckState.Checked if spec.enabled else Qt.CheckState.Unchecked)
                 self.plugins_table.setItem(row_index, 6, enabled_item)
 
                 hidden_item = QTableWidgetItem()
-                if spec.plugin_id != "settings_center":
-                    hidden_item.setFlags(hidden_flags)
-                else:
-                    hidden_item.setFlags(Qt.ItemFlag.ItemIsEnabled)
+                hidden_item.setFlags(hidden_flags)
                 hidden_item.setCheckState(Qt.CheckState.Checked if spec.hidden else Qt.CheckState.Unchecked)
                 self.plugins_table.setItem(row_index, 7, hidden_item)
 
@@ -373,7 +473,8 @@ class SettingsCenterPage(QWidget):
                 self.plugins_table.setItem(row_index, 10, path_item)
         finally:
             self._building_plugin_table = False
-        self.plugins_table.resizeColumnsToContents()
+        self.plugins_table.resizeColumnToContents(0)
+        self.plugins_table.resizeColumnToContents(1)
 
     def _make_action_button(self, icon_name: str, handler) -> QToolButton:
         button = QToolButton()
@@ -388,8 +489,8 @@ class SettingsCenterPage(QWidget):
     def _row_action_widget(self, spec, *, selected: bool) -> QWidget:
         container = QWidget()
         layout = QHBoxLayout(container)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(4)
+        layout.setContentsMargins(4, 0, 4, 0)
+        layout.setSpacing(2)
 
         export_check = QCheckBox()
         export_check.setChecked(selected)
@@ -399,29 +500,34 @@ class SettingsCenterPage(QWidget):
         if self._editing_plugin_id == spec.plugin_id:
             save_button = QToolButton()
             save_button.setAutoRaise(True)
-            save_button.setText("✓")
-            save_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            save_button.setIcon(icon_from_name("check", self) or self.style().standardIcon(QStyle.StandardPixmap.SP_DialogApplyButton))
+            save_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
             save_button.setToolTip(self._pt("plugins.row.save", "Save row edits"))
-            save_button.setStyleSheet("QToolButton { color: #1f6f46; font-weight: 800; font-size: 16px; }")
+            save_button.setIconSize(QSize(16, 16))
+            save_button.setFixedSize(24, 24)
+            save_button.setStyleSheet("QToolButton { background: #e7f5ec; border: 1px solid #9ad0ab; border-radius: 9px; padding: 2px; }")
             save_button.clicked.connect(lambda _checked=False, pid=spec.plugin_id: self._save_row_edit(pid))
             layout.addWidget(save_button)
 
             cancel_button = QToolButton()
             cancel_button.setAutoRaise(True)
-            cancel_button.setText("✕")
-            cancel_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
+            cancel_button.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_DialogCancelButton))
+            cancel_button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
             cancel_button.setToolTip(self._pt("plugins.row.cancel", "Cancel row edits"))
-            cancel_button.setStyleSheet("QToolButton { color: #8a3324; font-weight: 800; font-size: 15px; }")
+            cancel_button.setIconSize(QSize(16, 16))
+            cancel_button.setFixedSize(24, 24)
+            cancel_button.setStyleSheet("QToolButton { background: #f9ece8; border: 1px solid #d7aba3; border-radius: 9px; padding: 2px; }")
             cancel_button.clicked.connect(lambda _checked=False, pid=spec.plugin_id: self._cancel_row_edit(pid))
             layout.addWidget(cancel_button)
         else:
             edit_button = QToolButton()
             edit_button.setAutoRaise(True)
             edit_button.setIcon(icon_from_name("wrench", self) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileDialogDetailedView))
+            edit_button.setIconSize(QSize(15, 15))
+            edit_button.setFixedSize(22, 22)
             edit_button.setToolTip(self._pt("plugins.row.edit", "Edit plugin row"))
             edit_button.clicked.connect(lambda _checked=False, pid=spec.plugin_id: self._begin_row_edit(pid))
             layout.addWidget(edit_button)
-        layout.addStretch(1)
         return container
 
     def _begin_row_edit(self, plugin_id: str) -> None:
@@ -446,8 +552,8 @@ class SettingsCenterPage(QWidget):
         icon_override = self._editing_snapshot.get("icon", "")
         if spec.allow_icon_override:
             icon_widget = self.plugins_table.cellWidget(row, 1)
-            if isinstance(icon_widget, QComboBox):
-                icon_override = str(icon_widget.currentData() or "").strip()
+            if isinstance(icon_widget, IconPickerButton):
+                icon_override = icon_widget.selected_icon()
 
         self.services.set_plugin_override(plugin_id, display_name=name_override, icon=icon_override)
         self._editing_plugin_id = None
@@ -479,17 +585,16 @@ class SettingsCenterPage(QWidget):
             name_item.setFlags(flags)
 
         if editing and spec.allow_icon_override:
-            combo = QComboBox()
-            combo.addItem(self._pt("plugins.icon.default", "Default"), "")
-            for icon_id, label, icon in self._icon_options():
-                combo.addItem(icon, label, icon_id)
-            self._set_combo_value(combo, self._editing_snapshot.get("icon", ""))
-            self.plugins_table.setCellWidget(row, 1, combo)
+            picker = IconPickerButton(self, self._editing_snapshot.get("icon", ""))
+            self.plugins_table.setCellWidget(row, 1, picker)
         else:
             self.plugins_table.removeCellWidget(row, 1)
             icon_item = self.plugins_table.item(row, 1)
             if icon_item is not None:
                 icon_item.setText(self._icon_display_text(spec))
+                icon_item.setIcon(self._icon_display_icon(spec) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
+        self.plugins_table.resizeColumnToContents(0)
+        self.plugins_table.resizeColumnToContents(1)
 
     def _is_row_selected_for_export(self, row: int) -> bool:
         widget = self.plugins_table.cellWidget(row, 0)
@@ -500,10 +605,18 @@ class SettingsCenterPage(QWidget):
 
     def _icon_display_text(self, spec) -> str:
         override = self.services.plugin_icon_override(spec)
-        if not override:
-            return self._pt("plugins.icon.default", "Default")
+        return self._icon_display_name(override)
+
+    def _icon_display_name(self, icon_value: str) -> str:
+        if not icon_value:
+            return ""
         options = {icon_id: label for icon_id, label, _icon in self._icon_options()}
-        return options.get(override, Path(override).name or override)
+        return options.get(icon_value, Path(icon_value).name or icon_value)
+
+    def _icon_display_icon(self, spec):
+        override = self.services.plugin_icon_override(spec)
+        effective = override or str(spec.preferred_icon or "").strip()
+        return icon_from_name(effective, self) if effective else icon_from_name("plugin", self)
 
     def _browse_output_dir(self) -> None:
         current = self.output_dir_input.text().strip() or str(self.services.default_output_path())
@@ -667,7 +780,7 @@ class SettingsCenterPage(QWidget):
             item.setForeground(QColor("#1b5e20"))
 
     def _apply_plugin_states(self) -> None:
-        specs = self.services.plugin_manager.discover_plugins(include_disabled=True)
+        specs = self.services.manageable_plugin_specs(include_disabled=True)
         pending_risk_review: list[str] = []
         forced_block: list[str] = []
         updates: list[tuple[str, str, bool, bool, bool, bool]] = []
@@ -682,10 +795,6 @@ class SettingsCenterPage(QWidget):
             trusted = trusted_item.checkState() == Qt.CheckState.Checked if trusted_item is not None else spec.trusted
             enabled = enabled_item.checkState() == Qt.CheckState.Checked if enabled_item is not None else True
             hidden = hidden_item.checkState() == Qt.CheckState.Checked if hidden_item is not None else False
-            if spec.plugin_id == "settings_center":
-                trusted = True
-                enabled = True
-                hidden = False
             if spec.source_type == "builtin":
                 trusted = True
             if spec.source_type == "custom" and spec.risk_level == "critical":
@@ -813,7 +922,7 @@ class SettingsCenterPage(QWidget):
         self._export_specs(specs)
 
     def _export_all_plugins(self) -> None:
-        specs = self.services.plugin_manager.discover_plugins(include_disabled=True)
+        specs = self.services.manageable_plugin_specs(include_disabled=True)
         self._export_specs(specs)
 
     def _export_specs(self, specs) -> None:
@@ -843,7 +952,7 @@ class SettingsCenterPage(QWidget):
     def _selected_export_specs(self):
         specs_by_id = {
             spec.plugin_id: spec
-            for spec in self.services.plugin_manager.discover_plugins(include_disabled=True)
+            for spec in self.services.manageable_plugin_specs(include_disabled=True)
         }
         selected = []
         for row_index in range(self.plugins_table.rowCount()):

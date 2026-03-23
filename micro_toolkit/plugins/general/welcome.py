@@ -66,18 +66,6 @@ class DashboardPage(QWidget):
         outer.setContentsMargins(28, 28, 28, 28)
         outer.setSpacing(18)
 
-        self.hero_card = QFrame()
-        hero_layout = QVBoxLayout(self.hero_card)
-        hero_layout.setContentsMargins(20, 20, 20, 20)
-        hero_layout.setSpacing(6)
-        self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 30px; font-weight: 700;")
-        hero_layout.addWidget(self.title_label)
-        self.subtitle_label = QLabel()
-        self.subtitle_label.setWordWrap(True)
-        hero_layout.addWidget(self.subtitle_label)
-        outer.addWidget(self.hero_card)
-
         self.stats_grid = QGridLayout()
         self.stats_grid.setHorizontalSpacing(14)
         self.stats_grid.setVerticalSpacing(14)
@@ -154,13 +142,6 @@ class DashboardPage(QWidget):
         outer.addWidget(self.quick_access_card, 1)
 
     def _refresh(self) -> None:
-        self.title_label.setText(self._pt("title", "Your toolkit at a glance"))
-        self.subtitle_label.setText(
-            self._pt(
-                "subtitle",
-                "Track recent usage, keep your most-used tools one click away, and get a compact system snapshot without leaving the dashboard.",
-            )
-        )
         self.quick_access_title.setText(self._pt("quick.title", "Quick Access"))
         self.add_button.setText(self._pt("quick.add", "Add to quick access"))
         self.remove_button.setText(self._pt("quick.remove", "Remove selected"))
@@ -179,15 +160,12 @@ class DashboardPage(QWidget):
     def _apply_card_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
         for frame in (
-            self.hero_card,
             self.top_tools_card,
             self.status_card,
             self.quick_access_card,
         ):
             if frame is not None:
                 frame.setStyleSheet(card_style(palette))
-        self.title_label.setStyleSheet(page_title_style(palette, weight=700))
-        self.subtitle_label.setStyleSheet(muted_text_style(palette))
         self.quick_access_title.setStyleSheet(section_title_style(palette))
 
     def _render_stats(self) -> None:
