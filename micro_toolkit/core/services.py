@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import shutil
 import sys
 from datetime import datetime
@@ -58,13 +59,26 @@ class AppServices(QObject):
         super().__init__()
         self.app_root = Path(__file__).resolve().parents[1]
         self.runtime_root = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else self.app_root.parent
-        self.data_root = self.runtime_root / "data"
+        # Determine data and output roots based on frozen state and platform
+        if getattr(sys, "frozen", False):
+            if os.name == "nt":
+                base = Path(os.environ.get("LOCALAPPDATA", Path.home() / "AppData" / "Local")) / "Micro Toolkit"
+            elif sys.platform == "darwin":
+                base = Path.home() / "Library" / "Application Support" / "Micro Toolkit"
+            else:
+                base = Path.home() / ".local" / "share" / "micro-toolkit"
+            
+            self.data_root = base / "data"
+            self.output_root = base / "output"
+        else:
+            self.data_root = self.runtime_root / "data"
+            self.output_root = self.runtime_root / "output"
+
         self.assets_root = self.app_root / "assets"
         self.locales_root = self.app_root / "i18n"
         self.plugins_root = self.app_root / "plugins"
         self.builtin_manifest_path = self.app_root / "builtin_plugin_manifest.json"
         self.custom_plugins_root = self.data_root / "plugins"
-        self.output_root = self.runtime_root / "output"
         self.workflows_root = self.data_root / "workflows"
         self.config_path = self.data_root / "micro_toolkit_config.json"
         self.database_path = self.data_root / "micro_toolkit.db"

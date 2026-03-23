@@ -106,7 +106,7 @@
       ]
     },
     "general/welcome.py": {
-      "sha256": "cc163f3397c889d087c6283c0a61baec4ee436d1b77b494794d90351de1264f5",
+      "sha256": "e01df9409ec7b6dfabc23e39e50b9d23e9865c22d4fb0467d2a6629229800c33",
       "plugins": [
         {
           "plugin_id": "welcome_overview",
@@ -223,7 +223,7 @@
       ]
     },
     "settings_center.py": {
-      "sha256": "26a5404c8644817f6ff87cf6393295f10abc68d99f7def31a537a537e6185f13",
+      "sha256": "e70ace1ab1fd7d25258c1f17da7e4bc3a6a20733e0d59204aec9575b0996b0fa",
       "plugins": [
         {
           "plugin_id": "settings_center",

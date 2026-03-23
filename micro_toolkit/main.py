@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sys
+import os
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
@@ -11,7 +12,18 @@ from micro_toolkit.app import MicroToolkitWindow
 from micro_toolkit.core.services import AppServices
 
 
+_WIN_MUTEX = None
+
+
 def launch_gui(*, initial_plugin_id: str | None = None, start_minimized: bool = False) -> int:
+    global _WIN_MUTEX
+    if os.name == "nt":
+        try:
+            import ctypes
+            _WIN_MUTEX = ctypes.windll.kernel32.CreateMutexW(None, False, "MicroToolkitMutex")
+        except Exception:
+            pass
+
     app = QApplication(sys.argv)
     app.setApplicationName("Micro Toolkit")
     app.setApplicationVersion(__version__)
