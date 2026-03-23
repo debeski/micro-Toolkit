@@ -5,6 +5,11 @@ from dataclasses import dataclass
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QGuiApplication, QPalette, Qt
 
+try:
+    from qt_material import apply_stylesheet as apply_material_stylesheet
+except Exception:  # pragma: no cover - optional dependency
+    apply_material_stylesheet = None
+
 
 @dataclass(frozen=True)
 class ThemePalette:
@@ -112,8 +117,11 @@ class ThemeManager(QObject):
             base_font.setFamily(self._font_family)
         base_font.setPointSize(max(10, round(11 * scale)))
         app.setFont(base_font)
-        app.setPalette(self._build_qpalette(palette))
-        app.setStyleSheet(self._build_stylesheet(palette, scale))
+        if apply_material_stylesheet is not None:
+            self._apply_material_theme(app, palette, scale)
+        else:
+            app.setPalette(self._build_qpalette(palette))
+            app.setStyleSheet(self._build_legacy_stylesheet(palette, scale))
         self.theme_changed.emit(palette.mode)
 
     def refresh_system_mode(self, app) -> None:
@@ -197,7 +205,124 @@ class ThemeManager(QObject):
         qt_palette.setColor(QPalette.ColorGroup.Disabled, QPalette.ColorRole.HighlightedText, text)
         return qt_palette
 
-    def _build_stylesheet(self, palette: ThemePalette, scale: float) -> str:
+    def _apply_material_theme(self, app, palette: ThemePalette, scale: float) -> None:
+        density = self._material_density_scale(scale)
+        resource_parent = self.config.config_path.parent / "runtime" / "qt_material"
+        resource_parent.mkdir(parents=True, exist_ok=True)
+        extra = {
+            "font_family": self._loaded_font_families[0] if self._loaded_font_families else self._font_family,
+            "danger": palette.danger,
+            "warning": "#d48f12" if palette.mode == "light" else "#f0b84a",
+            "success": "#2f7d4d" if palette.mode == "light" else "#6dbb7f",
+            "density_scale": str(density),
+        }
+        apply_material_stylesheet(
+            app,
+            theme=self._material_theme_name(palette),
+            invert_secondary=palette.mode == "light",
+            extra=extra,
+            parent=str(resource_parent),
+        )
+        app.setPalette(self._build_qpalette(palette))
+        app.setStyleSheet(app.styleSheet() + "\n" + self._build_material_overlay_stylesheet(palette, scale))
+
+    def _material_theme_name(self, palette: ThemePalette) -> str:
+        return "dark_teal.xml" if palette.mode == "dark" else "light_teal.xml"
+
+    def _material_density_scale(self, scale: float) -> int:
+        if scale <= 0.95:
+            return -2
+        if scale < 1.05:
+            return -1
+        if scale <= 1.2:
+            return 0
+        if scale <= 1.4:
+            return 1
+        return 2
+
+    def _build_material_overlay_stylesheet(self, palette: ThemePalette, scale: float) -> str:
+        title_size = max(24, round(26 * scale))
+        page_title_size = max(20, round(24 * scale))
+        eyebrow_size = max(10, round(11 * scale))
+        body_size = max(12, round(13 * scale))
+        card_radius = max(14, round(18 * scale))
+        input_radius = max(10, round(12 * scale))
+        return f"""
+        QWidget {{
+            font-size: {body_size}px;
+        }}
+        QLabel, QCheckBox, QRadioButton {{
+            background: transparent;
+        }}
+        QMainWindow {{
+            background: {palette.window_bg};
+        }}
+        QFrame#SidebarCard, QFrame#HeaderCard, QFrame#PageCard {{
+            background: {palette.surface_bg};
+            border: 1px solid {palette.border};
+            border-radius: {card_radius}px;
+        }}
+        QLabel#AppTitle {{
+            font-size: {title_size}px;
+            font-weight: 700;
+            color: {palette.text_primary};
+        }}
+        QLabel#PageTitle {{
+            font-size: {page_title_size}px;
+            font-weight: 700;
+            color: {palette.text_primary};
+        }}
+        QLabel#PageDescription, QLabel#PlaceholderBody {{
+            color: {palette.text_muted};
+        }}
+        QLabel#PlaceholderTitle {{
+            font-size: {page_title_size}px;
+            font-weight: 700;
+            color: {palette.text_primary};
+        }}
+        QLabel#SectionEyebrow {{
+            color: {palette.accent};
+            font-size: {eyebrow_size}px;
+            font-weight: 700;
+            letter-spacing: 0.08em;
+            text-transform: uppercase;
+        }}
+        QTreeWidget {{
+            padding: 8px;
+            border-radius: {input_radius}px;
+        }}
+        QTreeWidget::item, QListWidget::item {{
+            padding: 9px 10px;
+            border-radius: 12px;
+            margin: 3px 0px;
+        }}
+        QTreeWidget::item:selected, QListWidget::item:selected {{
+            background: {palette.accent_soft};
+            color: {palette.text_primary};
+        }}
+        QTreeWidget::branch:selected {{
+            background: transparent;
+        }}
+        QToolButton:checked {{
+            background: {palette.accent_soft};
+            border: 1px solid {palette.accent};
+            color: {palette.text_primary};
+        }}
+        QStatusBar {{
+            background: {palette.status_bg};
+            border-top: 1px solid {palette.border};
+            min-height: 20px;
+        }}
+        QDockWidget::title {{
+            background: {palette.surface_alt_bg};
+            color: {palette.text_primary};
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid {palette.border};
+        }}
+        """
+
+    def _build_legacy_stylesheet(self, palette: ThemePalette, scale: float) -> str:
         title_size = max(24, round(26 * scale))
         page_title_size = max(20, round(24 * scale))
         eyebrow_size = max(10, round(11 * scale))

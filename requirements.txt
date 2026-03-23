@@ -9,3 +9,4 @@ PyPDF2
 psutil
 python-docx
 qtawesome
+qt-material
