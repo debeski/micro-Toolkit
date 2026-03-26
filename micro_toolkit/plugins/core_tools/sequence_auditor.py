@@ -195,17 +195,20 @@ class SequenceAuditorPage(QWidget):
         self._table_model = None
         self._build_ui()
 
+    def _pt(self, key: str, default: str, **kwargs) -> str:
+        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
+
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(16)
 
-        title = QLabel("Sequence Auditor")
+        title = QLabel(self._pt("title", "Sequence Auditor"))
         title.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         layout.addWidget(title)
 
         description = QLabel(
-            "Switch between folder mode and Excel mode to audit missing numbered entries and export a workbook with context rows."
+            self._pt("description", "Switch between folder mode and Excel mode to audit missing numbered entries and export a workbook with context rows.")
         )
         description.setWordWrap(True)
         description.setStyleSheet("font-size: 14px; color: #43535c;")
@@ -213,12 +216,12 @@ class SequenceAuditorPage(QWidget):
 
         mode_row = QHBoxLayout()
         mode_row.setSpacing(10)
-        mode_label = QLabel("Mode")
+        mode_label = QLabel(self._pt("label.mode", "Mode"))
         mode_label.setFixedWidth(90)
         mode_row.addWidget(mode_label)
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem("Folder", "folder")
-        self.mode_combo.addItem("Excel", "excel")
+        self.mode_combo.addItem(self._pt("mode.folder", "Folder"), "folder")
+        self.mode_combo.addItem(self._pt("mode.excel", "Excel"), "excel")
         self.mode_combo.currentIndexChanged.connect(self._update_mode_ui)
         mode_row.addWidget(self.mode_combo, 1)
         layout.addLayout(mode_row)
@@ -226,31 +229,31 @@ class SequenceAuditorPage(QWidget):
         path_row = QHBoxLayout()
         path_row.setSpacing(10)
         self.path_input = QLineEdit()
-        self.path_input.setPlaceholderText("Select a folder...")
+        self.path_input.setPlaceholderText(self._pt("path.placeholder.folder", "Select a folder..."))
         path_row.addWidget(self.path_input, 1)
-        self.browse_button = QPushButton("Browse")
+        self.browse_button = QPushButton(self._pt("button.browse", "Browse"))
         self.browse_button.clicked.connect(self._browse)
         path_row.addWidget(self.browse_button)
         layout.addLayout(path_row)
 
         column_row = QHBoxLayout()
         column_row.setSpacing(10)
-        self.column_label = QLabel("Column")
+        self.column_label = QLabel(self._pt("label.column", "Column"))
         self.column_label.setFixedWidth(90)
         column_row.addWidget(self.column_label)
         self.column_input = QLineEdit()
-        self.column_input.setPlaceholderText("Column name")
+        self.column_input.setPlaceholderText(self._pt("column.placeholder", "Column name"))
         column_row.addWidget(self.column_input, 1)
         layout.addLayout(column_row)
         self.column_row_layout = column_row
 
         controls = QHBoxLayout()
         controls.setSpacing(12)
-        self.run_button = QPushButton("Find Missing Sequence")
+        self.run_button = QPushButton(self._pt("button.run", "Find Missing Sequence"))
         self.run_button.clicked.connect(self._run)
         controls.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.open_output_button = QPushButton("Open Workbook")
+        self.open_output_button = QPushButton(self._pt("button.open", "Open Workbook"))
         self.open_output_button.setEnabled(False)
         self.open_output_button.clicked.connect(self._open_output)
         controls.addWidget(self.open_output_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -267,7 +270,7 @@ class SequenceAuditorPage(QWidget):
         )
         summary_layout = QVBoxLayout(summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
-        self.summary_label = QLabel("Choose a mode and source path.")
+        self.summary_label = QLabel(self._pt("summary.empty", "Choose a mode and source path."))
         self.summary_label.setWordWrap(True)
         self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
@@ -287,7 +290,7 @@ class SequenceAuditorPage(QWidget):
 
     def _update_mode_ui(self) -> None:
         is_excel = self._current_mode() == "excel"
-        self.path_input.setPlaceholderText("Select an Excel workbook..." if is_excel else "Select a folder...")
+        self.path_input.setPlaceholderText(self._pt("path.placeholder.excel", "Select an Excel workbook...") if is_excel else self._pt("path.placeholder.folder", "Select a folder..."))
         self.column_label.setVisible(is_excel)
         self.column_input.setVisible(is_excel)
 
@@ -295,16 +298,16 @@ class SequenceAuditorPage(QWidget):
         if self._current_mode() == "excel":
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
-                "Select Workbook",
+                self._pt("dialog.browse.excel", "Select Workbook"),
                 str(self.services.default_output_path()),
-                "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)",
+                self._pt("dialog.browse.excel.filter", "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)"),
             )
             if file_path:
                 self.path_input.setText(file_path)
         else:
             folder = QFileDialog.getExistingDirectory(
                 self,
-                "Select Folder",
+                self._pt("dialog.browse.folder", "Select Folder"),
                 str(self.services.default_output_path()),
             )
             if folder:
@@ -315,10 +318,10 @@ class SequenceAuditorPage(QWidget):
         path_value = self.path_input.text().strip()
         column_name = self.column_input.text().strip()
         if not path_value:
-            QMessageBox.warning(self, "Missing Input", "Choose a source folder or workbook.")
+            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_path", "Choose a source folder or workbook."))
             return
         if mode == "excel" and not column_name:
-            QMessageBox.warning(self, "Missing Input", "Enter the Excel column name to inspect.")
+            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_column", "Enter the Excel column name to inspect."))
             return
 
         self.run_button.setEnabled(False)
@@ -326,7 +329,7 @@ class SequenceAuditorPage(QWidget):
         self.progress.setValue(0)
         self.table.setModel(None)
         self._table_model = None
-        self.summary_label.setText("Auditing sequence gaps...")
+        self.summary_label.setText(self._pt("summary.running", "Auditing sequence gaps..."))
 
         self.services.run_task(
             lambda context: sequence_auditor_task(
@@ -350,17 +353,24 @@ class SequenceAuditorPage(QWidget):
         self._latest_output_path = result["output_path"]
         self._table_model = DataFrameTableModel(result["dataframe"])
         self.table.setModel(self._table_model)
+        mode_text = self._pt(f"mode.{result['mode']}", result['mode'].title())
         self.summary_label.setText(
-            f"Found {result['row_count']} result rows in {result['mode']} mode. Previewing the first {len(result['dataframe'])} rows."
+            self._pt(
+                "summary.success",
+                "Found {row_count} result rows in {mode} mode. Previewing the first {preview_count} rows.",
+                row_count=result['row_count'],
+                mode=mode_text,
+                preview_count=len(result['dataframe'])
+            )
         )
         self.open_output_button.setEnabled(True)
-        self.services.record_run(self.plugin_id, "SUCCESS", f"Generated sequence audit report in {result['mode']} mode")
+        self.services.record_run(self.plugin_id, "SUCCESS", self._pt("log.task.success", "Generated sequence audit report in {mode} mode", mode=mode_text))
 
     def _handle_error(self, payload: object) -> None:
-        message = payload.get("message", "Unknown sequence auditor error") if isinstance(payload, dict) else str(payload)
+        message = payload.get("message", self._pt("error.unknown", "Unknown sequence auditor error")) if isinstance(payload, dict) else str(payload)
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log("Sequence Auditor failed.", "ERROR")
+        self.services.log(self._pt("log.error", "Sequence Auditor failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)

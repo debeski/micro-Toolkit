@@ -32,16 +32,6 @@ class AboutCenterPlugin(QtPlugin):
     category = ""
     standalone = True
     preferred_icon = "info"
-    translations = {
-        "en": {
-            "plugin.name": "About",
-            "plugin.description": "Project information, support links, runtime versions, and system details.",
-        },
-        "ar": {
-            "plugin.name": "حول",
-            "plugin.description": "معلومات المشروع وروابط الدعم وإصدارات المكونات وتفاصيل النظام.",
-        },
-    }
 
     def create_widget(self, services) -> QWidget:
         return AboutCenterPage(services, self.plugin_id)

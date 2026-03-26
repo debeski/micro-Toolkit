@@ -128,17 +128,20 @@ class FolderMapperPage(QWidget):
         self._table_model = None
         self._build_ui()
 
+    def _pt(self, key: str, default: str, **kwargs) -> str:
+        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
+
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(16)
 
-        title = QLabel("Folder Mapper")
+        title = QLabel(self._pt("title", "Folder Mapper"))
         title.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         layout.addWidget(title)
 
         description = QLabel(
-            "Map file metadata for an entire folder tree into Excel, with a preview of the first rows inside the app."
+            self._pt("description", "Map file metadata for an entire folder tree into Excel, with a preview of the first rows inside the app.")
         )
         description.setWordWrap(True)
         description.setStyleSheet("font-size: 14px; color: #43535c;")
@@ -147,20 +150,20 @@ class FolderMapperPage(QWidget):
         folder_row = QHBoxLayout()
         folder_row.setSpacing(10)
         self.folder_input = QLineEdit()
-        self.folder_input.setPlaceholderText("Select a folder to export...")
+        self.folder_input.setPlaceholderText(self._pt("folder.placeholder", "Select a folder to export..."))
         folder_row.addWidget(self.folder_input, 1)
-        browse_button = QPushButton("Browse")
+        browse_button = QPushButton(self._pt("button.browse", "Browse"))
         browse_button.clicked.connect(self._browse_folder)
         folder_row.addWidget(browse_button)
         layout.addLayout(folder_row)
 
         controls = QHBoxLayout()
         controls.setSpacing(12)
-        self.run_button = QPushButton("Map Folder")
+        self.run_button = QPushButton(self._pt("button.run", "Map Folder"))
         self.run_button.clicked.connect(self._run)
         controls.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.open_output_button = QPushButton("Open Workbook")
+        self.open_output_button = QPushButton(self._pt("button.open", "Open Workbook"))
         self.open_output_button.setEnabled(False)
         self.open_output_button.clicked.connect(self._open_output)
         controls.addWidget(self.open_output_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -177,7 +180,7 @@ class FolderMapperPage(QWidget):
         )
         summary_layout = QVBoxLayout(summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
-        self.summary_label = QLabel("Choose a folder to export.")
+        self.summary_label = QLabel(self._pt("summary.empty", "Choose a folder to export."))
         self.summary_label.setWordWrap(True)
         self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
@@ -193,7 +196,7 @@ class FolderMapperPage(QWidget):
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
-            "Select Folder To Export",
+            self._pt("dialog.browse.title", "Select Folder To Export"),
             str(self.services.default_output_path()),
         )
         if folder:
@@ -202,13 +205,13 @@ class FolderMapperPage(QWidget):
     def _run(self) -> None:
         folder_path = self.folder_input.text().strip()
         if not folder_path:
-            QMessageBox.warning(self, "Missing Input", "Choose a folder to export.")
+            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_folder", "Choose a folder to export."))
             return
 
         self.run_button.setEnabled(False)
         self.open_output_button.setEnabled(False)
         self.progress.setValue(0)
-        self.summary_label.setText("Exporting folder contents...")
+        self.summary_label.setText(self._pt("summary.running", "Exporting folder contents..."))
         self.table.setModel(None)
         self._table_model = None
 
@@ -230,20 +233,26 @@ class FolderMapperPage(QWidget):
         self._table_model = DataFrameTableModel(result["dataframe"])
         self.table.setModel(self._table_model)
         self.summary_label.setText(
-            f"Exported {result['row_count']} rows for {result['folder_name']}. Previewing the first {len(result['dataframe'])} rows."
+            self._pt(
+                "summary.success",
+                "Exported {row_count} rows for {folder_name}. Previewing the first {preview_count} rows.",
+                row_count=result['row_count'],
+                folder_name=result['folder_name'],
+                preview_count=len(result['dataframe'])
+            )
         )
         self.open_output_button.setEnabled(True)
         self.services.record_run(
             self.plugin_id,
             "SUCCESS",
-            f"Exported folder metadata for {result['folder_name']}",
+            self._pt("log.task.success", "Exported folder metadata for {folder_name}", folder_name=result['folder_name']),
         )
 
     def _handle_error(self, payload: object) -> None:
-        message = payload.get("message", "Unknown folder mapper error") if isinstance(payload, dict) else str(payload)
+        message = payload.get("message", self._pt("error.unknown", "Unknown folder mapper error")) if isinstance(payload, dict) else str(payload)
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log("Folder Mapper failed.", "ERROR")
+        self.services.log(self._pt("log.error", "Folder Mapper failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)

@@ -1,0 +1,19 @@
+{
+  "plugin.name": "Inspector",
+  "plugin.description": "Developer inspection tools for exploring live Qt widgets, layout structure, and styles.",
+  "title": "Inspector",
+  "description": "Inspect live widgets in the running interface. Start inspect mode, hover the UI, then left-click a widget to capture its structure, palette, and stylesheet details. If you need to move to another page first, use right-click navigation while inspect mode stays active.",
+  "path.title": "Parent Chain",
+  "details.title": "Widget Details",
+  "text_unlock": "Unlock static text selection across the app",
+  "inspect.start": "Start inspecting",
+  "inspect.stop": "Stop inspecting",
+  "status.locked": "Developer mode is off. Enable it from Settings to use the inspector.",
+  "status.live": "Inspect mode is active. Hover the app, left-click to capture a widget, and use right-click navigation if you need to move to another page first. Press Esc to cancel.",
+  "status.text_unlock": "Inspector text unlock is active. Static app text can now be highlighted and copied where supported.",
+  "status.ready": "Inspector is ready. Start inspect mode to capture a widget.",
+  "summary.empty": "No widget selected yet.",
+  "summary.value": "Selected: {class_name}{object_suffix}\nGeometry: {geometry}",
+  "copy.done": "Copied",
+  "copy": "Copy snapshot"
+}

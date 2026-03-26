@@ -228,18 +228,21 @@ class ChartBuilderPage(QWidget):
         self._latest_result = None
         self._build_ui()
 
+    def _pt(self, key: str, default: str, **kwargs) -> str:
+        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
+
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(16)
 
-        title = QLabel("Chart Builder")
+        title = QLabel(self._pt("title", "Chart Builder"))
         title.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         layout.addWidget(title)
 
         description = QLabel(
-            "Build charts and analysis tables from Excel workbooks using a guided pipeline. "
-            "Start simple with grouped summaries, or enable advanced controls for pivots, melts, joins, filters, slicing, and export workflows."
+            self._pt("description", "Build charts and analysis tables from Excel workbooks using a guided pipeline. "
+            "Start simple with grouped summaries, or enable advanced controls for pivots, melts, joins, filters, slicing, and export workflows.")
         )
         description.setWordWrap(True)
         description.setStyleSheet("font-size: 14px; color: #43535c;")
@@ -253,21 +256,21 @@ class ChartBuilderPage(QWidget):
         source_layout.setVerticalSpacing(10)
 
         self.primary_input = QLineEdit()
-        self.primary_input.setPlaceholderText("Select primary Excel workbook...")
-        source_layout.addWidget(QLabel("Primary"), 0, 0)
+        self.primary_input.setPlaceholderText(self._pt("primary.placeholder", "Select primary Excel workbook..."))
+        source_layout.addWidget(QLabel(self._pt("label.primary", "Primary")), 0, 0)
         source_layout.addWidget(self.primary_input, 0, 1)
-        primary_browse = QPushButton("Browse")
+        primary_browse = QPushButton(self._pt("button.browse_primary", "Browse"))
         primary_browse.clicked.connect(self._browse_primary)
         source_layout.addWidget(primary_browse, 0, 2)
 
         self.operation_combo = QComboBox()
         for label, value in OPERATIONS:
-            self.operation_combo.addItem(label, value)
+            self.operation_combo.addItem(self._pt(f"op.{value}", label), value)
         self.operation_combo.currentIndexChanged.connect(self._update_operation_ui)
-        source_layout.addWidget(QLabel("Operation"), 1, 0)
+        source_layout.addWidget(QLabel(self._pt("label.operation", "Operation")), 1, 0)
         source_layout.addWidget(self.operation_combo, 1, 1)
 
-        self.advanced_checkbox = QCheckBox("Advanced mode")
+        self.advanced_checkbox = QCheckBox(self._pt("checkbox.advanced", "Advanced mode"))
         self.advanced_checkbox.toggled.connect(self._update_advanced_ui)
         source_layout.addWidget(self.advanced_checkbox, 1, 2)
         layout.addWidget(source_card)
@@ -290,24 +293,24 @@ class ChartBuilderPage(QWidget):
 
         self.chart_type_combo = QComboBox()
         for label, value in CHART_TYPES:
-            self.chart_type_combo.addItem(label, value)
-        chart_layout.addWidget(QLabel("Chart"), 0, 0)
+            self.chart_type_combo.addItem(self._pt(f"chart.{value}", label), value)
+        chart_layout.addWidget(QLabel(self._pt("label.chart", "Chart")), 0, 0)
         chart_layout.addWidget(self.chart_type_combo, 0, 1)
 
         self.palette_combo = QComboBox()
         for key in PALETTES:
             self.palette_combo.addItem(key.title(), key)
-        chart_layout.addWidget(QLabel("Palette"), 0, 2)
+        chart_layout.addWidget(QLabel(self._pt("label.palette", "Palette")), 0, 2)
         chart_layout.addWidget(self.palette_combo, 0, 3)
 
         self.x_axis_input = QLineEdit()
-        self.x_axis_input.setPlaceholderText("Optional X column")
-        chart_layout.addWidget(QLabel("X Column"), 1, 0)
+        self.x_axis_input.setPlaceholderText(self._pt("x_column.placeholder", "Optional X column"))
+        chart_layout.addWidget(QLabel(self._pt("label.x_column", "X Column")), 1, 0)
         chart_layout.addWidget(self.x_axis_input, 1, 1)
 
         self.y_axis_input = QLineEdit()
-        self.y_axis_input.setPlaceholderText("Optional Y column(s), comma-separated")
-        chart_layout.addWidget(QLabel("Y Column(s)"), 1, 2)
+        self.y_axis_input.setPlaceholderText(self._pt("y_columns.placeholder", "Optional Y column(s), comma-separated"))
+        chart_layout.addWidget(QLabel(self._pt("label.y_columns", "Y Column(s)")), 1, 2)
         chart_layout.addWidget(self.y_axis_input, 1, 3)
         layout.addWidget(chart_card)
 
@@ -319,47 +322,47 @@ class ChartBuilderPage(QWidget):
         advanced_layout.setVerticalSpacing(10)
 
         self.filter_input = QLineEdit()
-        self.filter_input.setPlaceholderText("Optional pandas query filter, e.g. Status == 'Open'")
-        advanced_layout.addWidget(QLabel("Filter"), 0, 0)
+        self.filter_input.setPlaceholderText(self._pt("filter.placeholder", "Optional pandas query filter, e.g. Status == 'Open'"))
+        advanced_layout.addWidget(QLabel(self._pt("label.filter", "Filter")), 0, 0)
         advanced_layout.addWidget(self.filter_input, 0, 1, 1, 3)
 
         self.slice_input = QLineEdit()
-        self.slice_input.setPlaceholderText("Optional slice, e.g. 0:100")
-        advanced_layout.addWidget(QLabel("Slice"), 1, 0)
+        self.slice_input.setPlaceholderText(self._pt("slice.placeholder", "Optional slice, e.g. 0:100"))
+        advanced_layout.addWidget(QLabel(self._pt("label.slice", "Slice")), 1, 0)
         advanced_layout.addWidget(self.slice_input, 1, 1)
 
         self.sort_input = QLineEdit()
-        self.sort_input.setPlaceholderText("Optional sort column(s)")
-        advanced_layout.addWidget(QLabel("Sort"), 1, 2)
+        self.sort_input.setPlaceholderText(self._pt("sort.placeholder", "Optional sort column(s)"))
+        advanced_layout.addWidget(QLabel(self._pt("label.sort", "Sort")), 1, 2)
         advanced_layout.addWidget(self.sort_input, 1, 3)
 
         self.top_n_spin = QSpinBox()
         self.top_n_spin.setRange(0, 50000)
         self.top_n_spin.setValue(0)
-        advanced_layout.addWidget(QLabel("Top N"), 2, 0)
+        advanced_layout.addWidget(QLabel(self._pt("label.top_n", "Top N")), 2, 0)
         advanced_layout.addWidget(self.top_n_spin, 2, 1)
 
-        self.sort_desc_checkbox = QCheckBox("Sort descending")
+        self.sort_desc_checkbox = QCheckBox(self._pt("checkbox.sort_desc", "Sort descending"))
         advanced_layout.addWidget(self.sort_desc_checkbox, 2, 2, 1, 2)
         layout.addWidget(self.advanced_card)
 
         controls = QHBoxLayout()
         controls.setSpacing(12)
-        self.run_button = QPushButton("Run Builder")
+        self.run_button = QPushButton(self._pt("button.run", "Run Builder"))
         self.run_button.clicked.connect(self._run)
         controls.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.export_xlsx_button = QPushButton("Export XLSX")
+        self.export_xlsx_button = QPushButton(self._pt("button.export_xlsx", "Export XLSX"))
         self.export_xlsx_button.setEnabled(False)
         self.export_xlsx_button.clicked.connect(self._export_xlsx)
         controls.addWidget(self.export_xlsx_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.export_html_button = QPushButton("Export HTML")
+        self.export_html_button = QPushButton(self._pt("button.export_html", "Export HTML"))
         self.export_html_button.setEnabled(False)
         self.export_html_button.clicked.connect(self._export_html)
         controls.addWidget(self.export_html_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.export_png_button = QPushButton("Export PNG")
+        self.export_png_button = QPushButton(self._pt("button.export_png", "Export PNG"))
         self.export_png_button.setEnabled(False)
         self.export_png_button.clicked.connect(self._export_png)
         controls.addWidget(self.export_png_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -374,7 +377,7 @@ class ChartBuilderPage(QWidget):
         summary_card.setStyleSheet("QFrame { background: #fffdf9; border: 1px solid #eadfce; border-radius: 14px; }")
         summary_layout = QVBoxLayout(summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
-        self.summary_label = QLabel("Configure the pipeline, then run the builder to preview a chart and result table.")
+        self.summary_label = QLabel(self._pt("summary.empty", "Configure the pipeline, then run the builder to preview a chart and result table."))
         self.summary_label.setWordWrap(True)
         self.summary_label.setStyleSheet("font-size: 13px; color: #43535c;")
         summary_layout.addWidget(self.summary_label)
@@ -396,7 +399,7 @@ class ChartBuilderPage(QWidget):
         splitter.setStretchFactor(1, 3)
         layout.addWidget(splitter, 1)
 
-        self._set_placeholder_chart("Chart preview will appear here.")
+        self._set_placeholder_chart(self._pt("preview.placeholder", "Chart preview will appear here."))
         self._update_operation_ui()
         self._update_advanced_ui()
 
@@ -408,19 +411,19 @@ class ChartBuilderPage(QWidget):
         form.setVerticalSpacing(10)
 
         self.group_input = QLineEdit()
-        self.group_input.setPlaceholderText("Group columns, e.g. Department, Status")
-        form.addWidget(QLabel("Group Columns"), 0, 0)
+        self.group_input.setPlaceholderText(self._pt("group_cols.placeholder", "Group columns, e.g. Department, Status"))
+        form.addWidget(QLabel(self._pt("label.group_cols", "Group Columns")), 0, 0)
         form.addWidget(self.group_input, 0, 1)
 
         self.value_input = QLineEdit()
-        self.value_input.setPlaceholderText("Optional numeric value column(s)")
-        form.addWidget(QLabel("Value Columns"), 1, 0)
+        self.value_input.setPlaceholderText(self._pt("value_cols.placeholder", "Optional numeric value column(s)"))
+        form.addWidget(QLabel(self._pt("label.value_cols", "Value Columns")), 1, 0)
         form.addWidget(self.value_input, 1, 1)
 
         self.agg_combo = QComboBox()
         for value in AGGREGATIONS:
             self.agg_combo.addItem(value.title(), value)
-        form.addWidget(QLabel("Aggregate"), 2, 0)
+        form.addWidget(QLabel(self._pt("label.agg", "Aggregate")), 2, 0)
         form.addWidget(self.agg_combo, 2, 1)
 
         self.operation_stack.addWidget(page)
@@ -433,18 +436,18 @@ class ChartBuilderPage(QWidget):
         form.setVerticalSpacing(10)
 
         self.pivot_index_input = QLineEdit()
-        self.pivot_index_input.setPlaceholderText("Pivot index column(s)")
-        form.addWidget(QLabel("Index"), 0, 0)
+        self.pivot_index_input.setPlaceholderText(self._pt("pivot_index.placeholder", "Pivot index column(s)"))
+        form.addWidget(QLabel(self._pt("label.pivot_index", "Index")), 0, 0)
         form.addWidget(self.pivot_index_input, 0, 1)
 
         self.pivot_columns_input = QLineEdit()
-        self.pivot_columns_input.setPlaceholderText("Pivot column(s)")
-        form.addWidget(QLabel("Columns"), 1, 0)
+        self.pivot_columns_input.setPlaceholderText(self._pt("pivot_cols.placeholder", "Pivot column(s)"))
+        form.addWidget(QLabel(self._pt("label.pivot_cols", "Columns")), 1, 0)
         form.addWidget(self.pivot_columns_input, 1, 1)
 
         self.pivot_values_input = QLineEdit()
-        self.pivot_values_input.setPlaceholderText("Pivot value column(s)")
-        form.addWidget(QLabel("Values"), 2, 0)
+        self.pivot_values_input.setPlaceholderText(self._pt("pivot_vals.placeholder", "Pivot value column(s)"))
+        form.addWidget(QLabel(self._pt("label.pivot_vals", "Values")), 2, 0)
         form.addWidget(self.pivot_values_input, 2, 1)
 
         self.operation_stack.addWidget(page)
@@ -457,13 +460,13 @@ class ChartBuilderPage(QWidget):
         form.setVerticalSpacing(10)
 
         self.melt_id_input = QLineEdit()
-        self.melt_id_input.setPlaceholderText("Optional id column(s)")
-        form.addWidget(QLabel("ID Vars"), 0, 0)
+        self.melt_id_input.setPlaceholderText(self._pt("melt_id.placeholder", "Optional id column(s)"))
+        form.addWidget(QLabel(self._pt("label.melt_id", "ID Vars")), 0, 0)
         form.addWidget(self.melt_id_input, 0, 1)
 
         self.melt_values_input = QLineEdit()
-        self.melt_values_input.setPlaceholderText("Value column(s) to melt")
-        form.addWidget(QLabel("Value Vars"), 1, 0)
+        self.melt_values_input.setPlaceholderText(self._pt("melt_vals.placeholder", "Value column(s) to melt"))
+        form.addWidget(QLabel(self._pt("label.melt_vals", "Value Vars")), 1, 0)
         form.addWidget(self.melt_values_input, 1, 1)
 
         self.operation_stack.addWidget(page)
@@ -476,8 +479,8 @@ class ChartBuilderPage(QWidget):
         form.setVerticalSpacing(10)
 
         self.transpose_input = QLineEdit()
-        self.transpose_input.setPlaceholderText("Optional columns to transpose")
-        form.addWidget(QLabel("Columns"), 0, 0)
+        self.transpose_input.setPlaceholderText(self._pt("transpose_cols.placeholder", "Optional columns to transpose"))
+        form.addWidget(QLabel(self._pt("label.transpose_cols", "Columns")), 0, 0)
         form.addWidget(self.transpose_input, 0, 1)
 
         self.operation_stack.addWidget(page)
@@ -490,27 +493,27 @@ class ChartBuilderPage(QWidget):
         form.setVerticalSpacing(10)
 
         self.secondary_input = QLineEdit()
-        self.secondary_input.setPlaceholderText("Select secondary Excel workbook...")
-        form.addWidget(QLabel("Secondary"), 0, 0)
+        self.secondary_input.setPlaceholderText(self._pt("secondary.placeholder", "Select secondary Excel workbook..."))
+        form.addWidget(QLabel(self._pt("label.secondary", "Secondary")), 0, 0)
         form.addWidget(self.secondary_input, 0, 1)
-        secondary_browse = QPushButton("Browse")
+        secondary_browse = QPushButton(self._pt("button.browse_secondary", "Browse"))
         secondary_browse.clicked.connect(self._browse_secondary)
         form.addWidget(secondary_browse, 0, 2)
 
         self.join_left_input = QLineEdit()
-        self.join_left_input.setPlaceholderText("Primary join column(s)")
-        form.addWidget(QLabel("Left Keys"), 1, 0)
+        self.join_left_input.setPlaceholderText(self._pt("left_keys.placeholder", "Primary join column(s)"))
+        form.addWidget(QLabel(self._pt("label.left_keys", "Left Keys")), 1, 0)
         form.addWidget(self.join_left_input, 1, 1, 1, 2)
 
         self.join_right_input = QLineEdit()
-        self.join_right_input.setPlaceholderText("Optional secondary join column(s)")
-        form.addWidget(QLabel("Right Keys"), 2, 0)
+        self.join_right_input.setPlaceholderText(self._pt("right_keys.placeholder", "Optional secondary join column(s)"))
+        form.addWidget(QLabel(self._pt("label.right_keys", "Right Keys")), 2, 0)
         form.addWidget(self.join_right_input, 2, 1, 1, 2)
 
         self.join_type_combo = QComboBox()
         for value in JOIN_TYPES:
             self.join_type_combo.addItem(value.title(), value)
-        form.addWidget(QLabel("Join Type"), 3, 0)
+        form.addWidget(QLabel(self._pt("label.join_type", "Join Type")), 3, 0)
         form.addWidget(self.join_type_combo, 3, 1)
 
         self.operation_stack.addWidget(page)
@@ -527,9 +530,9 @@ class ChartBuilderPage(QWidget):
     def _browse_primary(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Excel Workbook",
+            self._pt("dialog.browse.excel", "Select Excel Workbook"),
             str(self.services.default_output_path()),
-            "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)",
+            self._pt("dialog.browse.excel.filter", "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)"),
         )
         if file_path:
             self.primary_input.setText(file_path)
@@ -537,9 +540,9 @@ class ChartBuilderPage(QWidget):
     def _browse_secondary(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            "Select Secondary Excel Workbook",
+            self._pt("dialog.browse.secondary", "Select Secondary Excel Workbook"),
             str(self.services.default_output_path()),
-            "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)",
+            self._pt("dialog.browse.excel.filter", "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)"),
         )
         if file_path:
             self.secondary_input.setText(file_path)
@@ -576,22 +579,22 @@ class ChartBuilderPage(QWidget):
     def _run(self) -> None:
         primary_file = self.primary_input.text().strip()
         if not primary_file:
-            QMessageBox.warning(self, "Missing Input", "Choose a primary workbook.")
+            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_primary", "Choose a primary workbook."))
             return
 
         config = self._build_config()
         operation = str(config["operation"])
         if operation == "summarize" and not config["group_columns"]:
-            QMessageBox.warning(self, "Missing Input", "Enter at least one grouping column.")
+            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_group", "Enter at least one grouping column."))
             return
         if operation == "pivot" and (not config["pivot_index"] or not config["pivot_columns"] or not config["pivot_values"]):
-            QMessageBox.warning(self, "Missing Input", "Enter pivot index, columns, and values.")
+            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_pivot", "Enter pivot index, columns, and values."))
             return
         if operation == "melt" and not config["melt_values"]:
-            QMessageBox.warning(self, "Missing Input", "Enter at least one melt value column.")
+            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_melt", "Enter at least one melt value column."))
             return
         if operation == "merge" and (not config["secondary_file"] or not config["left_keys"]):
-            QMessageBox.warning(self, "Missing Input", "Choose the secondary workbook and enter join keys.")
+            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_merge", "Choose the secondary workbook and enter join keys."))
             return
 
         self.run_button.setEnabled(False)
@@ -599,11 +602,11 @@ class ChartBuilderPage(QWidget):
         self.export_html_button.setEnabled(False)
         self.export_png_button.setEnabled(False)
         self.progress.setValue(0)
-        self.summary_label.setText("Running chart builder...")
+        self.summary_label.setText(self._pt("summary.running", "Running chart builder..."))
         self.table.setModel(None)
         self._table_model = None
         self._latest_result = None
-        self._set_placeholder_chart("Building chart preview...")
+        self._set_placeholder_chart(self._pt("preview.building", "Building chart preview..."))
 
         self.services.run_task(
             lambda context: run_chart_builder_task(context, primary_file, config),
@@ -623,22 +626,27 @@ class ChartBuilderPage(QWidget):
         self._table_model = DataFrameTableModel(dataframe)
         self.table.setModel(self._table_model)
         self.summary_label.setText(
-            f"{result['primary_file']} processed with {str(result['operation']).replace('_', ' ')} mode. "
-            f"Produced {result['row_count']} result rows."
+            self._pt(
+                "summary.success",
+                "{primary} processed with {operation} mode. Produced {row_count} result rows.",
+                primary=result['primary_file'],
+                operation=str(result['operation']).replace('_', ' '),
+                row_count=result['row_count']
+            )
         )
         self._refresh_chart_preview()
         self.export_xlsx_button.setEnabled(True)
         self.export_html_button.setEnabled(True)
         self.export_png_button.setEnabled(self.chart_type_combo.currentData() != "none")
-        self.services.record_run(self.plugin_id, "SUCCESS", f"Built chart result for {result['primary_file']}")
-        self.services.log(f"Chart Builder complete for {result['primary_file']}.")
+        self.services.record_run(self.plugin_id, "SUCCESS", self._pt("log.task.success", "Built chart result for {primary}", primary=result['primary_file']))
+        self.services.log(self._pt("log.task.complete", "Chart Builder complete for {primary}.", primary=result['primary_file']))
 
     def _handle_error(self, payload: object) -> None:
-        message = payload.get("message", "Unknown chart builder error") if isinstance(payload, dict) else str(payload)
+        message = payload.get("message", self._pt("error.unknown", "Unknown chart builder error")) if isinstance(payload, dict) else str(payload)
         self.summary_label.setText(message)
         self._set_placeholder_chart(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log("Chart Builder failed.", "ERROR")
+        self.services.log(self._pt("log.error", "Chart Builder failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)
@@ -651,11 +659,11 @@ class ChartBuilderPage(QWidget):
 
     def _refresh_chart_preview(self) -> None:
         if not self._latest_result:
-            self._set_placeholder_chart("Chart preview will appear here.")
+            self._set_placeholder_chart(self._pt("preview.placeholder", "Chart preview will appear here."))
             return
         chart_type = self.chart_type_combo.currentData()
         if chart_type == "none":
-            self._set_placeholder_chart("Chart preview disabled.")
+            self._set_placeholder_chart(self._pt("preview.disabled", "Chart preview disabled."))
             return
         chart = self._build_chart(self._latest_result["dataframe"])
         self.chart_view.setChart(chart)
@@ -684,18 +692,18 @@ class ChartBuilderPage(QWidget):
         chart.legend().setVisible(True)
 
         if dataframe.empty:
-            chart.setTitle("No data available for chart preview.")
+            chart.setTitle(self._pt("preview.error.nodata", "No data available for chart preview."))
             chart.legend().hide()
             return chart
 
         if chart_type in {"bar", "line"} and (not x_column or not y_columns):
-            chart.setTitle("Choose chart columns or produce at least one numeric result column.")
+            chart.setTitle(self._pt("preview.error.cols", "Choose chart columns or produce at least one numeric result column."))
             chart.legend().hide()
             return chart
 
         if chart_type in {"pie", "donut"}:
             if not x_column or not y_columns:
-                chart.setTitle("Pie charts need one label column and one numeric value column.")
+                chart.setTitle(self._pt("preview.error.pie", "Pie charts need one label column and one numeric value column."))
                 chart.legend().hide()
                 return chart
             series = QPieSeries()
@@ -706,12 +714,12 @@ class ChartBuilderPage(QWidget):
                 slice_ = series.append(str(row[x_column]), float(row[y_columns[0]]))
                 slice_.setBrush(colors[index % len(colors)])
             chart.addSeries(series)
-            chart.setTitle(f"{chart_type.title()} chart: {x_column} vs {y_columns[0]}")
+            chart.setTitle(f"{self._pt(f'chart.{chart_type}', chart_type.title())}: {x_column} vs {y_columns[0]}")
             return chart
 
         if chart_type == "scatter":
             if not y_columns:
-                chart.setTitle("Scatter charts need at least one numeric Y column.")
+                chart.setTitle(self._pt("preview.error.scatter", "Scatter charts need at least one numeric Y column."))
                 chart.legend().hide()
                 return chart
             x_values = dataframe[x_column] if x_column in dataframe.columns else dataframe.index
@@ -736,7 +744,7 @@ class ChartBuilderPage(QWidget):
                 chart.addSeries(series)
                 series.attachAxis(axis_x)
                 series.attachAxis(axis_y)
-            chart.setTitle(f"Scatter chart: {', '.join(y_columns[:3])}")
+            chart.setTitle(f"{self._pt('chart.scatter', 'Scatter')}: {', '.join(y_columns[:3])}")
             return chart
 
         if chart_type == "line":
@@ -758,7 +766,7 @@ class ChartBuilderPage(QWidget):
                 chart.addSeries(series)
                 series.attachAxis(axis_x)
                 series.attachAxis(axis_y)
-            chart.setTitle(f"Line chart: {', '.join(y_columns[:4])}")
+            chart.setTitle(f"{self._pt('chart.line', 'Line')}: {', '.join(y_columns[:4])}")
             return chart
 
         series = QBarSeries()
@@ -780,7 +788,7 @@ class ChartBuilderPage(QWidget):
         chart.addAxis(axis_y, Qt.AlignmentFlag.AlignLeft)
         series.attachAxis(axis_x)
         series.attachAxis(axis_y)
-        chart.setTitle(f"Bar chart: {', '.join(y_columns[:4])}")
+        chart.setTitle(f"{self._pt('chart.bar', 'Bar')}: {', '.join(y_columns[:4])}")
         return chart
 
     def _export_xlsx(self) -> None:
@@ -788,14 +796,14 @@ class ChartBuilderPage(QWidget):
             return
         save_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Result Workbook",
+            self._pt("dialog.export.xlsx", "Export Result Workbook"),
             str(self.services.default_output_path() / "chart_builder.xlsx"),
-            "Excel Files (*.xlsx)",
+            self._pt("dialog.export.xlsx.filter", "Excel Files (*.xlsx)"),
         )
         if not save_path:
             return
         self._latest_result["dataframe"].to_excel(save_path, index=False)
-        self.services.log(f"Chart Builder workbook exported to {save_path}.")
+        self.services.log(self._pt("log.export.xlsx", "Chart Builder workbook exported to {path}.", path=save_path))
 
     def _chart_png_bytes(self) -> bytes:
         pixmap = self.chart_view.grab()
@@ -813,27 +821,27 @@ class ChartBuilderPage(QWidget):
             return
         save_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export Chart Image",
+            self._pt("dialog.export.png", "Export Chart Image"),
             str(self.services.default_output_path() / "chart_builder.png"),
-            "PNG Files (*.png)",
+            self._pt("dialog.export.png.filter", "PNG Files (*.png)"),
         )
         if not save_path:
             return
         pixmap = self.chart_view.grab()
         if pixmap.isNull():
-            QMessageBox.warning(self, "Export Failed", "No chart preview is available to export.")
+            QMessageBox.warning(self, self._pt("dialog.export.failed.title", "Export Failed"), self._pt("dialog.export.failed.msg", "No chart preview is available to export."))
             return
         pixmap.save(save_path, "PNG")
-        self.services.log(f"Chart Builder image exported to {save_path}.")
+        self.services.log(self._pt("log.export.png", "Chart Builder image exported to {path}.", path=save_path))
 
     def _export_html(self) -> None:
         if not self._latest_result:
             return
         save_path, _ = QFileDialog.getSaveFileName(
             self,
-            "Export HTML Report",
+            self._pt("dialog.export.html", "Export HTML Report"),
             str(self.services.default_output_path() / "chart_builder.html"),
-            "HTML Files (*.html)",
+            self._pt("dialog.export.html.filter", "HTML Files (*.html)"),
         )
         if not save_path:
             return
@@ -842,12 +850,21 @@ class ChartBuilderPage(QWidget):
         chart_html = ""
         if chart_bytes:
             encoded = base64.b64encode(chart_bytes).decode("ascii")
-            chart_html = f'<img alt="Chart Preview" src="data:image/png;base64,{encoded}" style="max-width: 100%; border-radius: 12px;" />'
+            chart_html = f'<img alt="{self._pt("report.img_alt", "Chart Preview")}" src="data:image/png;base64,{encoded}" style="max-width: 100%; border-radius: 12px;" />'
+        
+        report_title = self._pt("report.title", "Chart Builder Report")
+        source_label = self._pt("report.source", "Source workbook:")
+        op_label = self._pt("report.operation", "Operation:")
+        rows_label = self._pt("report.rows", "Rows:")
+        preview_h2 = self._pt("report.h2.preview", "Chart Preview")
+        table_h2 = self._pt("report.h2.table", "Result Table")
+        no_chart_msg = self._pt("report.no_chart", "No chart image was generated for the current preview.")
+
         report = f"""<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>Chart Builder Report</title>
+  <title>{report_title}</title>
   <style>
     body {{ font-family: Arial, sans-serif; margin: 24px; color: #10232c; background: #f8fafc; }}
     .card {{ background: white; border-radius: 16px; padding: 18px; margin-bottom: 18px; box-shadow: 0 8px 26px rgba(15, 23, 42, 0.08); }}
@@ -860,17 +877,17 @@ class ChartBuilderPage(QWidget):
 </head>
 <body>
   <div class="card">
-    <h1>Chart Builder Report</h1>
-    <div class="meta">Source workbook: {self._latest_result['primary_file']}</div>
-    <div class="meta">Operation: {str(self._latest_result['operation']).replace('_', ' ').title()}</div>
-    <div class="meta">Rows: {self._latest_result['row_count']}</div>
+    <h1>{report_title}</h1>
+    <div class="meta">{source_label} {self._latest_result['primary_file']}</div>
+    <div class="meta">{op_label} {str(self._latest_result['operation']).replace('_', ' ').title()}</div>
+    <div class="meta">{rows_label} {self._latest_result['row_count']}</div>
   </div>
   <div class="card">
-    <h2>Chart Preview</h2>
-    {chart_html or '<div class="meta">No chart image was generated for the current preview.</div>'}
+    <h2>{preview_h2}</h2>
+    {chart_html or f'<div class="meta">{no_chart_msg}</div>'}
   </div>
   <div class="card">
-    <h2>Result Table</h2>
+    <h2>{table_h2}</h2>
     {dataframe.to_html(index=False, border=0)}
   </div>
 </body>
@@ -878,4 +895,4 @@ class ChartBuilderPage(QWidget):
 """
         with open(save_path, "w", encoding="utf-8") as handle:
             handle.write(report)
-        self.services.log(f"Chart Builder HTML report exported to {save_path}.")
+        self.services.log(self._pt("log.export.html", "Chart Builder HTML report exported to {path}.", path=save_path))

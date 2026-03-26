@@ -4,6 +4,7 @@
   "shell.subtitle": "A fast, native-feeling PySide6 desktop toolkit with lazy plugin discovery, multilingual shell chrome, tray integration, and cached tool pages.",
   "shell.search": "Search...",
   "shell.dashboard": "Dashboard",
+  "shell.quick_access": "Quick Access",
   "shell.clipboard": "Clipboard",
   "shell.workflows": "Workflows",
   "shell.plugins": "Plugins",

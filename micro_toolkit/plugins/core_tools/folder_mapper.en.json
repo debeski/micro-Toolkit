@@ -1,0 +1,19 @@
+{
+  "plugin.name": "Folder Mapper",
+  "plugin.description": "Scan a folder tree and map file metadata, paths, permissions, and dates into an Excel workbook.",
+  "title": "Folder Mapper",
+  "description": "Map file metadata for an entire folder tree into Excel, with a preview of the first rows inside the app.",
+  "folder.placeholder": "Select a folder to export...",
+  "button.browse": "Browse",
+  "button.run": "Map Folder",
+  "button.open": "Open Workbook",
+  "summary.empty": "Choose a folder to export.",
+  "dialog.browse.title": "Select Folder To Export",
+  "dialog.error.title": "Missing Input",
+  "dialog.error.missing_folder": "Choose a folder to export.",
+  "summary.running": "Exporting folder contents...",
+  "summary.success": "Exported {row_count} rows for {folder_name}. Previewing the first {preview_count} rows.",
+  "error.unknown": "Unknown folder mapper error",
+  "log.error": "Folder Mapper failed.",
+  "log.task.success": "Exported folder metadata for {folder_name}"
+}

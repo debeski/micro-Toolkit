@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtCore import QObject, QThreadPool, Signal, Slot
+from PySide6.QtCore import QObject, QThreadPool, QTimer, Signal, Slot
 
 from micro_toolkit.core.app_config import AppConfig
 from micro_toolkit.core.autostart import AutostartManager
@@ -105,6 +105,10 @@ class AppServices(QObject):
         self.thread_pool = QThreadPool.globalInstance()
         self.application = None
         self.main_window = None
+        self._visual_refresh_pending = False
+        self._visual_refresh_timer = QTimer(self)
+        self._visual_refresh_timer.setSingleShot(True)
+        self._visual_refresh_timer.timeout.connect(self._apply_pending_visual_refresh)
         self.hotkey_helper_manager = HotkeyHelperManager(self.data_root, self.logger)
         self.elevated_broker = ElevatedBrokerManager(
             self.data_root,
@@ -282,63 +286,28 @@ class AppServices(QObject):
 
     def set_theme(self, theme_name: str) -> str:
         selected = self.theme_manager.set_color(theme_name)
-        if self.application is not None:
-            if self.main_window is not None:
-                self.main_window.begin_loading("Applying theme...")
-            try:
-                self.theme_manager.apply(self.application)
-            finally:
-                if self.main_window is not None:
-                    self.main_window.end_loading()
+        self._schedule_visual_refresh("Applying theme...")
         return selected
 
     def set_theme_selection(self, color_key: str, dark_enabled: bool) -> str:
         selected = self.theme_manager.theme_name_for(color_key, dark_enabled)
         self.theme_manager.set_theme(selected)
-        if self.application is not None:
-            if self.main_window is not None:
-                self.main_window.begin_loading("Applying theme...")
-            try:
-                self.theme_manager.apply(self.application)
-            finally:
-                if self.main_window is not None:
-                    self.main_window.end_loading()
+        self._schedule_visual_refresh("Applying theme...")
         return selected
 
     def set_dark_mode(self, enabled: bool) -> str:
         selected = self.theme_manager.set_dark_mode(enabled)
-        if self.application is not None:
-            if self.main_window is not None:
-                self.main_window.begin_loading("Applying theme...")
-            try:
-                self.theme_manager.apply(self.application)
-            finally:
-                if self.main_window is not None:
-                    self.main_window.end_loading()
+        self._schedule_visual_refresh("Applying theme...")
         return selected
 
     def set_density_scale(self, density: int) -> int:
         selected = self.theme_manager.set_density_scale(density)
-        if self.application is not None:
-            if self.main_window is not None:
-                self.main_window.begin_loading("Refreshing layout...")
-            try:
-                self.theme_manager.apply(self.application)
-            finally:
-                if self.main_window is not None:
-                    self.main_window.end_loading()
+        self._schedule_visual_refresh("Refreshing layout...")
         return selected
 
     def set_ui_scaling(self, scale: float) -> float:
         normalized = self.theme_manager.set_ui_scaling(scale)
-        if self.application is not None:
-            if self.main_window is not None:
-                self.main_window.begin_loading("Refreshing layout...")
-            try:
-                self.theme_manager.apply(self.application)
-            finally:
-                if self.main_window is not None:
-                    self.main_window.end_loading()
+        self._schedule_visual_refresh("Refreshing layout...")
         return normalized
 
     def set_language(self, language: str) -> str:
@@ -353,6 +322,25 @@ class AppServices(QObject):
         if self.application is not None:
             self.theme_manager.apply(self.application)
             self.i18n.apply(self.application)
+
+    def _schedule_visual_refresh(self, message: str) -> None:
+        if self.application is None:
+            return
+        if self.main_window is not None and not self._visual_refresh_pending:
+            self.main_window.begin_loading(message)
+            self._visual_refresh_pending = True
+        self._visual_refresh_timer.start(90)
+
+    def _apply_pending_visual_refresh(self) -> None:
+        if self.application is None:
+            self._visual_refresh_pending = False
+            return
+        try:
+            self.theme_manager.apply(self.application)
+        finally:
+            if self.main_window is not None and self._visual_refresh_pending:
+                self.main_window.end_loading()
+            self._visual_refresh_pending = False
 
     def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> None:
         if is_system_component(plugin_id):

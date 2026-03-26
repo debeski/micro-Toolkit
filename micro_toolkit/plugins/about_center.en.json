@@ -1,0 +1,23 @@
+{
+  "plugin.name": "About",
+  "plugin.description": "Project information, support links, runtime versions, and system details.",
+  "title": "About Micro Toolkit",
+  "summary": "Micro Toolkit is a fast desktop companion for office and home use, built around a dynamic plugin engine, lazy loading, app-level services, multilingual UI support, workflow automation, and desktop-native integrations.",
+  "identity": "DeBeski (micro)\nLibyan Economic Information and Documentation Center\n2026",
+  "project.heading": "Project",
+  "project.body": "The app shell, plugin discovery, translations, workflows, elevated broker, hotkey helper, and runtime services are all part of the same underlying desktop codebase rather than stitched-on external layers.",
+  "license.heading": "License",
+  "license.body": "NON-COMMERCIAL LICENSE",
+  "system.heading": "System",
+  "system.unknown": "Unknown",
+  "system.os": "Operating system",
+  "system.cpu": "Processor",
+  "system.memory": "Memory",
+  "system.runtime": "Runtime",
+  "support.heading": "Support",
+  "support.body": "Report issues at: <a href=\"https://github.com/debeski/micro-Toolkit/issues\">github.com/debeski/micro-Toolkit/issues</a>",
+  "libs.heading": "Used Tools and Libraries",
+  "github.tooltip": "Open GitHub repository",
+  "libs.name": "Component",
+  "libs.version": "Version"
+}

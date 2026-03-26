@@ -1,9 +1,11 @@
 {
   "_meta": { "label": "العربية" },
   "shell.sidebar.eyebrow": "مجموعة سطح المكتب",
+  "shell.system_tools": "أدوات النظام",
   "shell.subtitle": "حزمة سطح مكتب سريعة مبنية على PySide6 مع تحميل كسول للإضافات، وواجهة متعددة اللغات، وتكامل مع شريط النظام، وتخزين مؤقت للصفحات.",
   "shell.search": "بحث...",
   "shell.dashboard": "لوحة التحكم",
+  "shell.quick_access": "الوصول السريع",
   "shell.clipboard": "الحافظة",
   "shell.workflows": "سلاسل العمل",
   "shell.plugins": "الإضافات",

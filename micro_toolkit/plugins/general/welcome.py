@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtCharts import QBarCategoryAxis, QBarSeries, QBarSet, QChart, QChartView, QPieSeries, QValueAxis
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QLocale, Qt
 from PySide6.QtGui import QColor, QPainter
 from PySide6.QtWidgets import (
     QBoxLayout,
@@ -94,6 +94,12 @@ class DashboardPage(QWidget):
     def _pt(self, key: str, default: str, **kwargs) -> str:
         return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
+    def _plugin_name(self, plugin_id: str, fallback: str) -> str:
+        spec = self.services.plugin_manager.get_spec(plugin_id)
+        if spec is not None:
+            return self.services.plugin_display_name(spec)
+        return fallback
+
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 28, 28, 28)
@@ -150,17 +156,17 @@ class DashboardPage(QWidget):
         self.workspace_actions.setVerticalSpacing(8)
         self._workspace_action_buttons = [
             self._make_dashboard_action_button(
-                self._pt("workspace.action.clipboard", "Clipboard"),
+                self._plugin_name("clip_manager", "Clipboard"),
                 "clipboard",
                 lambda: self._open_plugin("clip_manager"),
             ),
             self._make_dashboard_action_button(
-                self._pt("workspace.action.workflows", "Workflows"),
+                self._plugin_name("workflow_studio", "Workflows"),
                 "workflow",
                 lambda: self._open_plugin("workflow_studio"),
             ),
             self._make_dashboard_action_button(
-                self._pt("workspace.action.settings", "Settings"),
+                self._plugin_name("settings_center", "Settings"),
                 "settings",
                 self._open_settings,
             ),
@@ -316,7 +322,9 @@ class DashboardPage(QWidget):
             greeting = self._pt("hero.greeting.afternoon", "Good afternoon")
         else:
             greeting = self._pt("hero.greeting.evening", "Good evening")
-        date_text = now.strftime("%A, %B %d, %Y")
+        
+        locale = QLocale(self.services.i18n.current_language())
+        date_text = self._ensure_western_numerals(locale.toString(now, QLocale.FormatType.LongFormat))
         return greeting, date_text
 
     def _hero_text_colors(self) -> tuple[str, str, str]:
@@ -483,7 +491,8 @@ class DashboardPage(QWidget):
                 "failed": QColor(palette.danger),
             }
             for status, count in status_counts.items():
-                slice_obj = series.append(str(status).title(), int(count))
+                status_text = self._pt(f"activity.status.{str(status).lower()}", str(status).title())
+                slice_obj = series.append(status_text, int(count))
                 slice_obj.setColor(status_colors.get(str(status).lower(), QColor(palette.accent)))
         chart.addSeries(series)
         return chart
@@ -515,18 +524,25 @@ class DashboardPage(QWidget):
         last_backup = self.services.backup_manager.last_backup_at()
         backup_due = self.services.backup_manager.backup_due()
         backup_value = self._pt("workspace.backup.value.due", "Backup due") if backup_due else self._pt("workspace.backup.value.ready", "On schedule")
+        
+        schedule_key = self.services.backup_manager.schedule().lower()
+        # Using settings_center prefix for backup schedules to reuse translations if possible, 
+        # but welcome plugin has its own _pt which uses welcome.ar.json. 
+        # I'll add backup.schedule.* to welcome.ar.json as well for consistency.
+        schedule_text = self._pt(f"backup.schedule.{schedule_key}", schedule_key.title())
+
         if last_backup:
             backup_meta = self._pt(
                 "workspace.backup.meta.last",
                 "{schedule} cadence. Last backup: {timestamp}.",
-                schedule=self.services.backup_manager.schedule().title(),
+                schedule=schedule_text,
                 timestamp=self._format_iso_timestamp(last_backup),
             )
         else:
             backup_meta = self._pt(
                 "workspace.backup.meta.none",
                 "{schedule} cadence. No encrypted backup has been created yet.",
-                schedule=self.services.backup_manager.schedule().title(),
+                schedule=schedule_text,
             )
         self.workspace_stack.addWidget(
             self._build_workspace_row(
@@ -588,7 +604,8 @@ class DashboardPage(QWidget):
         palette = self.services.theme_manager.current_palette()
         history = self.services.session_manager.get_history(limit=5)
         if not history:
-            empty = QLabel(self._pt("activity.none", "No tool activity has been logged yet."))
+            empty_text = self._pt("activity.none", "No tool activity has been logged yet.")
+            empty = QLabel(empty_text)
             empty.setWordWrap(True)
             empty.setStyleSheet(muted_text_style(palette, size=14))
             self.activity_stack.addWidget(empty)
@@ -609,7 +626,9 @@ class DashboardPage(QWidget):
             label.setStyleSheet(section_title_style(palette, size=17))
             top.addWidget(label)
             top.addStretch(1)
-            status_label = QLabel(str(status).title())
+            
+            status_text = self._pt(f"activity.status.{str(status).lower()}", str(status).title())
+            status_label = QLabel(status_text)
             status_label.setStyleSheet(self._status_badge_style(str(status)))
             top.addWidget(status_label)
             layout.addLayout(top)
@@ -687,15 +706,23 @@ class DashboardPage(QWidget):
 
     def _format_timestamp(self, timestamp) -> str:
         try:
-            return datetime.fromtimestamp(float(timestamp)).strftime("%b %d, %Y · %H:%M")
+            dt = datetime.fromtimestamp(float(timestamp))
+            return self._ensure_western_numerals(QLocale(self.services.i18n.current_language()).toString(dt, QLocale.FormatType.ShortFormat))
         except Exception:
             return str(timestamp)
-
+    
     def _format_iso_timestamp(self, timestamp: str) -> str:
         try:
-            return datetime.fromisoformat(timestamp).strftime("%b %d, %Y · %H:%M")
+            dt = datetime.fromisoformat(timestamp)
+            return self._ensure_western_numerals(QLocale(self.services.i18n.current_language()).toString(dt, QLocale.FormatType.ShortFormat))
         except Exception:
             return timestamp
+
+    def _ensure_western_numerals(self, text: str) -> str:
+        eastern_numerals = "٠١٢٣٤٥٦٧٨٩"
+        western_numerals = "0123456789"
+        trans = str.maketrans(eastern_numerals, western_numerals)
+        return text.translate(trans)
 
     def _safe_dir_item_count(self, path: Path) -> int:
         try:

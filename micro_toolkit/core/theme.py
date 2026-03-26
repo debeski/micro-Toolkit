@@ -8,9 +8,11 @@ from PySide6.QtGui import QColor, QFont, QFontDatabase, QGuiApplication, QPalett
 
 try:
     from qt_material import apply_stylesheet as apply_material_stylesheet
+    from qt_material import build_stylesheet as build_material_stylesheet
     from qt_material import list_themes as list_material_themes
 except Exception:  # pragma: no cover - optional dependency
     apply_material_stylesheet = None
+    build_material_stylesheet = None
     list_material_themes = None
 
 
@@ -98,6 +100,7 @@ class ThemeManager(QObject):
         self.assets_root = Path(assets_root)
         self._font_family = "Amiri"
         self._loaded_font_families: list[str] = []
+        self._fonts_initialized = False
         self._color_key = "pink"
         self._dark_mode = False
         self._density_scale = 0
@@ -244,7 +247,12 @@ class ThemeManager(QObject):
         palette = self.current_palette()
         app.setFont(self._build_font(scale))
         app.setPalette(self._build_qpalette(palette))
-        stylesheet = self._build_material_stylesheet(app, palette, scale)
+        if apply_material_stylesheet is not None:
+            try:
+                app.setStyle("Fusion")
+            except Exception:
+                pass
+        stylesheet = self._build_material_stylesheet(palette, scale)
         app.setStyleSheet(stylesheet)
         self.theme_changed.emit(palette.mode)
 
@@ -264,6 +272,8 @@ class ThemeManager(QObject):
         return base_font
 
     def _ensure_font_loaded(self) -> None:
+        if self._fonts_initialized and self._loaded_font_families:
+            return
         preferred: list[str] = []
         font_candidates = [
             self.assets_root / "fonts" / "Amiri.ttf",
@@ -283,6 +293,7 @@ class ThemeManager(QObject):
             if family not in preferred:
                 preferred.append(family)
         self._loaded_font_families = preferred
+        self._fonts_initialized = True
 
     def _normalized_scale(self) -> float:
         return self._ui_scale
@@ -361,16 +372,16 @@ class ThemeManager(QObject):
         runtime.mkdir(parents=True, exist_ok=True)
         return runtime
 
-    def _build_material_stylesheet(self, app, palette: ThemePalette, scale: float) -> str:
-        if apply_material_stylesheet is not None:
-            apply_material_stylesheet(
-                app,
+    def _build_material_stylesheet(self, palette: ThemePalette, scale: float) -> str:
+        if build_material_stylesheet is not None:
+            stylesheet = build_material_stylesheet(
                 theme=self.current_theme(),
                 invert_secondary=self.current_mode() == "light",
                 extra=self._material_extra(palette),
                 parent=str(self._material_parent_path()),
             )
-            return app.styleSheet() + "\n" + self._build_overlay_stylesheet(palette, scale)
+            if stylesheet:
+                return stylesheet + "\n" + self._build_overlay_stylesheet(palette, scale)
         return self._build_fallback_stylesheet(palette, scale)
 
     def _material_extra(self, palette: ThemePalette) -> dict[str, str]:

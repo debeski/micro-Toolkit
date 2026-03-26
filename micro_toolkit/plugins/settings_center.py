@@ -1159,14 +1159,15 @@ class SettingsCenterPage(QWidget):
         )
         scope_options = self.services.shortcut_manager.available_scopes()
         for row_index, binding in enumerate(bindings):
-            title_item = QTableWidgetItem(binding.title)
+            title = self._pt(f"shortcut.action.{binding.action_id}", binding.title)
+            title_item = QTableWidgetItem(title)
             title_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.shortcut_table.setItem(row_index, 0, title_item)
             self.shortcut_table.setItem(row_index, 1, QTableWidgetItem(binding.sequence or binding.default_sequence))
 
             combo = QComboBox()
             for scope_id, label in scope_options:
-                combo.addItem(label, scope_id)
+                combo.addItem(self._pt(f"shortcut.scope.{scope_id}", label), scope_id)
             self._set_combo_value(combo, binding.scope)
             self.shortcut_table.setCellWidget(row_index, 2, combo)
         self._refresh_shortcut_status()
@@ -1213,7 +1214,7 @@ class SettingsCenterPage(QWidget):
                 category_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self.plugins_table.setItem(row_index, 3, category_item)
 
-                source_item = QTableWidgetItem(spec.source_type.title())
+                source_item = QTableWidgetItem(self._pt(f"plugins.source.{spec.source_type.lower()}", spec.source_type.title()))
                 source_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self.plugins_table.setItem(row_index, 4, source_item)
 
@@ -1238,7 +1239,7 @@ class SettingsCenterPage(QWidget):
                 hidden_item.setCheckState(Qt.CheckState.Checked if spec.hidden else Qt.CheckState.Unchecked)
                 self.plugins_table.setItem(row_index, 7, hidden_item)
 
-                risk_item = QTableWidgetItem(spec.risk_level.title())
+                risk_item = QTableWidgetItem(self._pt(f"plugins.risk.{spec.risk_level.lower()}", spec.risk_level.title()))
                 risk_item.setToolTip(self._plugin_review_details(spec))
                 risk_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self._style_risk_item(risk_item, spec.risk_level)
@@ -1723,12 +1724,22 @@ class SettingsCenterPage(QWidget):
 
     def _refresh_backup_status(self) -> None:
         backups = self.services.backup_manager.list_backups()
-        latest = backups[0]["modified_at"] if backups else self._pt("backup.none", "No backups yet")
+        latest_raw = backups[0]["modified_at"] if backups else ""
+        
+        if latest_raw:
+            # Wrap date in RTL marker if we are in an RTL layout to prevent flip issues with hyphens/colons
+            latest = f"\u200f{latest_raw}" if self.services.i18n.is_rtl() else latest_raw
+        else:
+            latest = self._pt("backup.none", "No backups yet")
+            
+        schedule_key = str(self.backup_schedule_combo.currentData() or self.services.backup_manager.schedule()).lower()
+        schedule_text = self._pt(f"backup.schedule.{schedule_key}", schedule_key.title())
+        
         self.backup_status_label.setText(
             self._pt(
                 "backup.status",
                 "Schedule: {schedule}. Last backup: {latest}.",
-                schedule=str(self.backup_schedule_combo.currentData() or self.services.backup_manager.schedule()).title(),
+                schedule=schedule_text,
                 latest=latest,
             )
         )

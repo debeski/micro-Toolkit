@@ -12,7 +12,6 @@ from PySide6.QtWidgets import (
     QApplication,
     QDockWidget,
     QFrame,
-    QGraphicsBlurEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -177,8 +176,10 @@ class LoadingOverlay(QWidget):
     def __init__(self, parent: QWidget):
         super().__init__(parent)
         self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
+        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
+        self.setAutoFillBackground(False)
+        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
         self.hide()
-        self._blur_targets: list[QWidget] = []
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
@@ -188,27 +189,53 @@ class LoadingOverlay(QWidget):
 
     def show_message(self, message: str) -> None:
         self.setGeometry(self.parentWidget().rect())
-        self._apply_blur(True)
         self.raise_()
+        self._set_keyboard_grabbed(True)
+        self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
         self.spinner.start()
         self.show()
 
     def hide_overlay(self) -> None:
         self.spinner.stop()
-        self._apply_blur(False)
+        self._set_keyboard_grabbed(False)
         self.hide()
 
-    def set_blur_targets(self, targets: list[QWidget]) -> None:
-        self._blur_targets = [target for target in targets if target is not None]
+    def set_blur_targets(self, _targets: list[QWidget]) -> None:
+        # Kept for compatibility with existing calls. The overlay is now self-contained.
+        return
 
-    def _apply_blur(self, enabled: bool) -> None:
-        for target in self._blur_targets:
+    def _set_keyboard_grabbed(self, enabled: bool) -> None:
+        app = QApplication.instance()
+        if app is None or app.platformName() == "offscreen":
+            return
+        try:
             if enabled:
-                effect = QGraphicsBlurEffect(target)
-                effect.setBlurRadius(14)
-                target.setGraphicsEffect(effect)
+                self.grabKeyboard()
             else:
-                target.setGraphicsEffect(None)
+                self.releaseKeyboard()
+        except Exception:
+            pass
+
+    def mousePressEvent(self, event) -> None:
+        event.accept()
+
+    def mouseMoveEvent(self, event) -> None:
+        event.accept()
+
+    def mouseReleaseEvent(self, event) -> None:
+        event.accept()
+
+    def mouseDoubleClickEvent(self, event) -> None:
+        event.accept()
+
+    def wheelEvent(self, event) -> None:
+        event.accept()
+
+    def keyPressEvent(self, event) -> None:
+        event.accept()
+
+    def keyReleaseEvent(self, event) -> None:
+        event.accept()
 
 
 class TerminalOutputView(QPlainTextEdit):

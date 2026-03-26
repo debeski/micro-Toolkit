@@ -1,0 +1,19 @@
+{
+  "plugin.name": "خريطة المجلدات",
+  "plugin.description": "مسح شجرة مجلد وتعيين البيانات الوصفية للملف، المسارات، الأذونات، والتواريخ في مصنف Excel.",
+  "title": "خريطة المجلدات",
+  "description": "تصدير البيانات الوصفية للملفات لشجرة مجلد كاملة إلى Excel، مع معاينة للصفوف الأولى داخل التطبيق.",
+  "folder.placeholder": "حدد مجلداً لتصديره...",
+  "button.browse": "استعراض",
+  "button.run": "تعيين المجلد",
+  "button.open": "فتح المصنف",
+  "summary.empty": "اختر مجلداً لتصديره.",
+  "dialog.browse.title": "تحديد مجلد للتصدير",
+  "dialog.error.title": "إدخال مفقود",
+  "dialog.error.missing_folder": "اختر مجلداً لتصديره.",
+  "summary.running": "جاري تصدير محتويات المجلد...",
+  "summary.success": "تم تصدير {row_count} صف(صفوف) للمجلد {folder_name}. جاري معاينة أول {preview_count} صف(صفوف).",
+  "error.unknown": "خطأ غير معروف في خريطة المجلدات",
+  "log.error": "فشلت عملية خريطة المجلدات.",
+  "log.task.success": "تم تصدير البيانات الوصفية للمجلد {folder_name}"
+}
