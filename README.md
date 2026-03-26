@@ -1,8 +1,8 @@
 # Micro Toolkit
 
-Micro Toolkit is a fast, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
+Micro Toolkit is a fast, cross-platform, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
 
-Current app version: `1.2.0`
+Current app version: `0.6.3`
 
 ## Overview
 
