@@ -53,4 +53,4 @@ Filename: "{app}\micro-toolkit.exe"; Parameters: "config startup --enable --star
 Filename: "{app}\micro-toolkit.exe"; Description: "{cm:LaunchProgram,Micro Toolkit}"; Flags: nowait postinstall skipifsilent
 
 [UninstallRun]
-Filename: "{app}\micro-toolkit.exe"; Parameters: "config startup --disable"; StatusMsg: "Removing startup preference..."; Flags: runhidden waituntilterminated skipifdoesntexist
+Filename: "{app}\micro-toolkit.exe"; Parameters: "config startup --disable"; StatusMsg: "Removing startup preference..."; Flags: runhidden waituntilterminated skipifdoesntexist; RunOnceId: "RemoveMicroToolkitStartup"
