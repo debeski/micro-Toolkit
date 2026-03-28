@@ -6,7 +6,7 @@ import math
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QEvent, QProcess, QRectF, QSize, Qt, QTimer
+from PySide6.QtCore import QByteArray, QEvent, QPoint, QProcess, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QKeyEvent, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -16,6 +16,8 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QLineEdit,
+    QListWidget,
+    QListWidgetItem,
     QMainWindow,
     QPlainTextEdit,
     QProgressBar,
@@ -53,6 +55,7 @@ from micro_toolkit.core.table_utils import configure_resizable_table
 PLUGIN_ID_ROLE = Qt.ItemDataRole.UserRole + 1
 GROUP_KEY_ROLE = Qt.ItemDataRole.UserRole + 2
 ITEM_SOURCE_ROLE = Qt.ItemDataRole.UserRole + 3
+SEARCH_RESULT_ROLE = Qt.ItemDataRole.UserRole + 4
 
 
 class BranchlessTreeStyle(QProxyStyle):
@@ -106,6 +109,78 @@ class SidebarItemDelegate(QStyledItemDelegate):
         opt.state &= ~QStyle.StateFlag.State_MouseOver
         opt.rect = row_rect.adjusted(5, 0, -2, 0)
         super().paint(painter, opt, index)
+
+
+class SearchResultsItemDelegate(QStyledItemDelegate):
+    def paint(self, painter, option, index) -> None:
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+
+        row_rect = opt.rect.adjusted(2, 1, -2, -1)
+
+        painter.save()
+        if opt.state & QStyle.StateFlag.State_Selected:
+            bg = opt.palette.color(opt.palette.ColorRole.Highlight)
+            bg.setAlpha(42)
+            painter.setPen(Qt.PenStyle.NoPen)
+            painter.setBrush(bg)
+            painter.drawRoundedRect(row_rect, 10, 10)
+        elif opt.state & QStyle.StateFlag.State_MouseOver:
+            bg = opt.palette.color(opt.palette.ColorRole.Highlight)
+            bg.setAlpha(18)
+            pen = QColor(opt.palette.color(opt.palette.ColorRole.Mid))
+            pen.setAlpha(110)
+            painter.setPen(QPen(pen, 1))
+            painter.setBrush(bg)
+            painter.drawRoundedRect(row_rect, 10, 10)
+        painter.restore()
+
+        opt.state &= ~QStyle.StateFlag.State_Selected
+        opt.state &= ~QStyle.StateFlag.State_MouseOver
+        opt.rect = row_rect.adjusted(8, 0, -6, 0)
+        super().paint(painter, opt, index)
+
+
+class SearchResultsListWidget(QListWidget):
+    def __init__(self, parent: QWidget | None = None):
+        super().__init__(parent)
+        self.setMouseTracking(True)
+        self.viewport().setMouseTracking(True)
+
+    def select_row(self, row: int) -> None:
+        if row < 0 or row >= self.count():
+            return
+        item = self.item(row)
+        if item is None or not (item.flags() & Qt.ItemFlag.ItemIsSelectable):
+            return
+        self.blockSignals(True)
+        try:
+            self.clearSelection()
+            self.setCurrentItem(item)
+            item.setSelected(True)
+        finally:
+            self.blockSignals(False)
+        self.scrollToItem(item)
+        self.viewport().update()
+
+    def _select_item_at_pos(self, pos: QPoint) -> None:
+        item = self.itemAt(pos)
+        if item is None:
+            return
+        row = self.row(item)
+        if row >= 0:
+            self.select_row(row)
+
+    def mouseMoveEvent(self, event) -> None:
+        self._select_item_at_pos(event.pos())
+        super().mouseMoveEvent(event)
+
+    def viewportEvent(self, event) -> bool:
+        if event.type() == QEvent.Type.HoverMove:
+            position = getattr(event, "position", None)
+            pos = position().toPoint() if callable(position) else event.pos()
+            self._select_item_at_pos(pos)
+        return super().viewportEvent(event)
 
 
 class SpinnerIndicator(QWidget):
@@ -418,6 +493,7 @@ class MicroToolkitWindow(QMainWindow):
         self._pending_plugin_open_id: str | None = None
         self._plugin_open_loading_active = False
         self._pending_command_center_section: str | None = None
+        self._last_search_results: list[dict[str, object]] = []
         self._dock_state_timer = QTimer(self)
         self._dock_state_timer.setSingleShot(True)
         self._dock_state_timer.setInterval(220)
@@ -436,6 +512,9 @@ class MicroToolkitWindow(QMainWindow):
         self._apply_shell_texts()
         self.services.attach_main_window(self)
         self.log_dock.installEventFilter(self)
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
         QTimer.singleShot(0, self._restore_activity_dock_state)
 
     def _build_ui(self) -> None:
@@ -515,6 +594,29 @@ class MicroToolkitWindow(QMainWindow):
         search_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         search_host_layout.addWidget(self.search_input, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
         utility_layout.addWidget(search_host, 1, Qt.AlignmentFlag.AlignVCenter)
+
+        self.search_results_popup = QFrame(self)
+        self.search_results_popup.setObjectName("ShellSearchResultsPopup")
+        self.search_results_popup.setFrameShape(QFrame.Shape.NoFrame)
+        self.search_results_popup.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.search_results_popup.hide()
+        search_results_layout = QVBoxLayout(self.search_results_popup)
+        search_results_layout.setContentsMargins(6, 6, 6, 6)
+        search_results_layout.setSpacing(0)
+
+        self.search_results_list = SearchResultsListWidget()
+        self.search_results_list.setObjectName("ShellSearchResultsList")
+        self.search_results_list.setItemDelegate(SearchResultsItemDelegate(self.search_results_list))
+        self.search_results_list.setFrameShape(QFrame.Shape.NoFrame)
+        self.search_results_list.setFocusPolicy(Qt.FocusPolicy.NoFocus)
+        self.search_results_list.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.search_results_list.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.search_results_list.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        self.search_results_list.setVerticalScrollMode(QAbstractItemView.ScrollMode.ScrollPerPixel)
+        self.search_results_list.setUniformItemSizes(False)
+        self.search_results_popup.setLayoutDirection(self.services.i18n.layout_direction())
+        self.search_results_list.setLayoutDirection(self.services.i18n.layout_direction())
+        search_results_layout.addWidget(self.search_results_list)
 
         self.top_refresh_spinner = SpinnerIndicator(self, size=24, inset=7, thickness=4, interval_ms=80)
         self.top_refresh_spinner.setObjectName("TopRefreshSpinner")
@@ -759,6 +861,10 @@ class MicroToolkitWindow(QMainWindow):
 
     def _bind_signals(self) -> None:
         self.search_input.textChanged.connect(self._apply_filter)
+        self.search_input.editingFinished.connect(self._hide_search_results_popup)
+        self.search_input.installEventFilter(self)
+        self.search_results_list.itemClicked.connect(self._activate_search_result_item)
+        self.search_results_list.itemActivated.connect(self._activate_search_result_item)
         self.sidebar_tree.itemSelectionChanged.connect(self._handle_selection_change)
         self.sidebar_tree.itemClicked.connect(self._handle_sidebar_click)
         self.sidebar_tree.itemExpanded.connect(self._handle_sidebar_group_expanded)
@@ -950,43 +1056,306 @@ class MicroToolkitWindow(QMainWindow):
             self.sidebar_tree.setCurrentItem(matches[0])
             return
 
-    def _apply_filter(self, text: str) -> None:
-        needle = text.strip().lower()
-        root = self.sidebar_tree.invisibleRootItem()
+    def _open_command_center_section_on_widget(self, settings_page: QWidget | None, section_id: str | None) -> bool:
+        if settings_page is None:
+            return False
+        section = str(section_id or "general").strip().lower()
+        open_method_name = {
+            "plugins": "open_plugins_tab",
+            "quick_access": "open_quick_access_tab",
+            "shortcuts": "open_shortcuts_tab",
+        }.get(section, "open_general_tab")
+        open_section = getattr(settings_page, open_method_name, None)
+        if callable(open_section):
+            open_section()
+            return True
+        return False
+
+    def _command_center_search_entries(self) -> list[dict[str, object]]:
+        settings_title = self.services.i18n.tr("shell.settings", "Settings")
+        command_center_spec = self.plugin_by_id.get("command_center")
+        settings_display = (
+            self.services.plugin_display_name(command_center_spec)
+            if command_center_spec is not None
+            else self.services.i18n.tr("shell.command_center", "Command Center")
+        )
+        plugins_title = self.services.i18n.tr("shell.plugins", "Plugins")
+        quick_access_title = self.services.plugin_text("command_center", "tab.quick_access", "Quick Access")
+        shortcuts_title = self.services.plugin_text("command_center", "tab.shortcuts", "Shortcuts")
+        general_title = self.services.plugin_text("command_center", "tab.general", "General")
+        return [
+            {
+                "kind": "command_center_section",
+                "section_id": "general",
+                "title": settings_title,
+                "subtitle": f"{settings_display} / {general_title}",
+                "keywords": [
+                    settings_title,
+                    settings_display,
+                    general_title,
+                    "settings",
+                    "preferences",
+                    "general",
+                    "appearance",
+                    "behavior",
+                ],
+                "icon": self._system_component_icon("command_center"),
+            },
+            {
+                "kind": "command_center_section",
+                "section_id": "plugins",
+                "title": plugins_title,
+                "subtitle": settings_display,
+                "keywords": [
+                    plugins_title,
+                    settings_display,
+                    "plugins",
+                    "plugin manager",
+                    "extensions",
+                    "addons",
+                ],
+                "icon": self._system_component_icon("plugin_manager"),
+            },
+            {
+                "kind": "command_center_section",
+                "section_id": "quick_access",
+                "title": quick_access_title,
+                "subtitle": settings_display,
+                "keywords": [
+                    quick_access_title,
+                    settings_display,
+                    "quick access",
+                    "favorites",
+                    "pins",
+                    "pinned",
+                ],
+                "icon": self._named_icon("pin", fallback=QStyle.StandardPixmap.SP_DialogApplyButton),
+            },
+            {
+                "kind": "command_center_section",
+                "section_id": "shortcuts",
+                "title": shortcuts_title,
+                "subtitle": settings_display,
+                "keywords": [
+                    shortcuts_title,
+                    settings_display,
+                    "shortcuts",
+                    "hotkeys",
+                    "keys",
+                    "bindings",
+                ],
+                "icon": self._named_icon("workflow", fallback=QStyle.StandardPixmap.SP_BrowserReload),
+            },
+        ]
+
+    def _global_search_entries(self) -> list[dict[str, object]]:
         language = self.services.i18n.current_language()
-        for i in range(root.childCount()):
-            item = root.child(i)
-            plugin_id = item.data(0, PLUGIN_ID_ROLE)
-            if plugin_id:
-                spec = self.plugin_by_id.get(plugin_id)
-                haystack = " ".join(
-                    [
-                        self.services.plugin_display_name(spec) if spec else "",
-                        spec.localized_description(language) if spec else "",
-                    ]
-                ).lower()
-                item.setHidden(bool(needle) and needle not in haystack)
+        entries = list(self._command_center_search_entries())
+        for spec in self.all_specs:
+            if not spec.enabled or spec.hidden:
+                continue
+            if spec.plugin_id == INSPECTOR_PLUGIN_ID and not self._system_toolbar_button_visible(INSPECTOR_PLUGIN_ID):
+                continue
+            title = self.services.plugin_display_name(spec)
+            localized_description = spec.localized_description(language)
+            localized_category = spec.localized_category(language)
+            subtitle_parts = [part for part in (localized_category, localized_description) if part]
+            entries.append(
+                {
+                    "kind": "plugin",
+                    "plugin_id": spec.plugin_id,
+                    "title": title,
+                    "subtitle": " / ".join(subtitle_parts[:2]),
+                    "keywords": [
+                        title,
+                        spec.localized_name(language),
+                        spec.name,
+                        localized_description,
+                        spec.description,
+                        localized_category,
+                        spec.category,
+                        spec.plugin_id,
+                    ],
+                    "icon": self._plugin_icon(spec),
+                }
+            )
+        return entries
+
+    def _matched_search_entries(self, text: str) -> list[dict[str, object]]:
+        query = self._normalized_text(text)
+        terms = [term for term in query.split() if term]
+        if not terms:
+            return []
+
+        scored_matches: list[tuple[int, str, dict[str, object]]] = []
+        for entry in self._global_search_entries():
+            title = self._normalized_text(str(entry.get("title", "")))
+            subtitle = self._normalized_text(str(entry.get("subtitle", "")))
+            keyword_values = [self._normalized_text(str(value)) for value in entry.get("keywords", [])]
+            haystack = " ".join(value for value in [title, subtitle, *keyword_values] if value)
+            if not haystack or any(term not in haystack for term in terms):
                 continue
 
-            visible_children = 0
-            for j in range(item.childCount()):
-                child = item.child(j)
-                child_plugin_id = child.data(0, PLUGIN_ID_ROLE)
-                spec = self.plugin_by_id.get(child_plugin_id)
-                haystack = " ".join(
-                    [
-                        self.services.plugin_display_name(spec) if spec else "",
-                        spec.localized_description(language) if spec else "",
-                        spec.localized_category(language) if spec else "",
-                    ]
-                ).lower()
-                hidden = bool(needle) and needle not in haystack
-                child.setHidden(hidden)
-                if not hidden:
-                    visible_children += 1
-            item.setHidden(visible_children == 0 and bool(needle))
-            if needle and visible_children:
-                item.setExpanded(True)
+            score = 0
+            if title == query:
+                score += 120
+            elif title.startswith(query):
+                score += 88
+            elif query in title:
+                score += 58
+            if subtitle.startswith(query):
+                score += 22
+            elif query and query in subtitle:
+                score += 12
+            for term in terms:
+                if title.startswith(term):
+                    score += 16
+                elif term in title:
+                    score += 8
+                if any(keyword.startswith(term) for keyword in keyword_values if keyword):
+                    score += 6
+                elif any(term in keyword for keyword in keyword_values if keyword):
+                    score += 3
+            scored_matches.append((score, title, entry))
+
+        scored_matches.sort(key=lambda payload: (-payload[0], payload[1]))
+        return [entry for _score, _title, entry in scored_matches[:8]]
+
+    def _search_result_alignment(self) -> Qt.AlignmentFlag:
+        if self.services.i18n.is_rtl():
+            return Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+        return Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+
+    def _populate_search_results(self, entries: list[dict[str, object]]) -> None:
+        self._last_search_results = list(entries)
+        self.search_results_list.clear()
+        alignment = self._search_result_alignment()
+        if not entries:
+            empty_item = QListWidgetItem(self.services.i18n.tr("shell.search.empty", "No matching pages found"))
+            empty_item.setFlags(empty_item.flags() & ~Qt.ItemFlag.ItemIsSelectable & ~Qt.ItemFlag.ItemIsEnabled)
+            empty_item.setTextAlignment(int(alignment))
+            empty_item.setSizeHint(QSize(0, 38))
+            self.search_results_list.addItem(empty_item)
+            self.search_results_list.setCurrentItem(None)
+            return
+
+        for entry in entries:
+            title = str(entry.get("title", "")).strip()
+            subtitle = str(entry.get("subtitle", "")).strip()
+            item_text = title if not subtitle else f"{title}\n{subtitle}"
+            item = QListWidgetItem(entry.get("icon"), item_text)
+            item.setData(SEARCH_RESULT_ROLE, entry)
+            item.setTextAlignment(int(alignment))
+            item.setToolTip(subtitle or title)
+            item.setSizeHint(QSize(0, 48 if subtitle else 38))
+            self.search_results_list.addItem(item)
+        self._set_search_result_row(0)
+
+    def _reposition_search_results_popup(self) -> None:
+        if not hasattr(self, "search_results_popup"):
+            return
+        popup_width = max(self.search_input.width(), 380)
+        available_width = max(280, self.width() - 32)
+        popup_width = min(popup_width, available_width)
+        popup_height = min(360, max(44, self.search_results_list.sizeHintForRow(0) * max(1, self.search_results_list.count()) + 12))
+        anchor = self.search_input.mapTo(self, QPoint(0, self.search_input.height() + 8))
+        x = anchor.x()
+        if self.services.i18n.is_rtl():
+            x = self.search_input.mapTo(self, QPoint(self.search_input.width() - popup_width, self.search_input.height() + 8)).x()
+        x = max(8, min(x, self.width() - popup_width - 8))
+        y = anchor.y()
+        self.search_results_popup.setGeometry(x, y, popup_width, popup_height)
+
+    def _show_search_results_popup(self) -> None:
+        self._reposition_search_results_popup()
+        self.search_results_popup.raise_()
+        self.search_results_popup.show()
+
+    def _hide_search_results_popup(self) -> None:
+        if hasattr(self, "search_results_popup"):
+            self.search_results_popup.hide()
+        self._last_search_results = []
+
+    @staticmethod
+    def _event_global_point(event) -> QPoint | None:
+        if hasattr(event, "globalPosition"):
+            try:
+                return event.globalPosition().toPoint()
+            except Exception:
+                return None
+        if hasattr(event, "globalPos"):
+            try:
+                return event.globalPos()
+            except Exception:
+                return None
+        return None
+
+    @staticmethod
+    def _global_point_inside_widget(widget: QWidget | None, global_pos: QPoint | None) -> bool:
+        if widget is None or global_pos is None or not widget.isVisible():
+            return False
+        local_pos = widget.mapFromGlobal(global_pos)
+        return widget.rect().contains(local_pos)
+
+    def _handle_search_outside_click(self, event) -> None:
+        if not hasattr(self, "search_input"):
+            return
+        popup_visible = getattr(self, "search_results_popup", None) is not None and self.search_results_popup.isVisible()
+        search_focused = self.search_input.hasFocus()
+        if not popup_visible and not search_focused:
+            return
+
+        global_pos = self._event_global_point(event)
+        inside_search = self._global_point_inside_widget(self.search_input, global_pos)
+        inside_popup = self._global_point_inside_widget(getattr(self, "search_results_popup", None), global_pos)
+
+        if not inside_search and not inside_popup:
+            if popup_visible:
+                self._hide_search_results_popup()
+            if search_focused:
+                self.search_input.clearFocus()
+
+    def _move_search_result_selection(self, step: int) -> None:
+        if not self.search_results_popup.isVisible() or self.search_results_list.count() == 0:
+            return
+        current_row = self.search_results_list.currentRow()
+        if current_row < 0:
+            current_row = 0 if step >= 0 else self.search_results_list.count() - 1
+        next_row = max(0, min(self.search_results_list.count() - 1, current_row + step))
+        self._set_search_result_row(next_row)
+
+    def _set_search_result_row(self, row: int) -> None:
+        self.search_results_list.select_row(row)
+
+    def _activate_search_entry(self, entry: dict[str, object]) -> None:
+        self._hide_search_results_popup()
+        self.search_input.clear()
+        kind = str(entry.get("kind", ""))
+        if kind == "command_center_section":
+            self.open_command_center_section(str(entry.get("section_id", "general")))
+            return
+        plugin_id = str(entry.get("plugin_id", "")).strip()
+        if plugin_id:
+            self.open_plugin(plugin_id)
+
+    def _activate_current_search_result(self) -> None:
+        item = self.search_results_list.currentItem()
+        if item is None:
+            return
+        self._activate_search_result_item(item)
+
+    def _activate_search_result_item(self, item: QListWidgetItem) -> None:
+        entry = item.data(SEARCH_RESULT_ROLE)
+        if isinstance(entry, dict):
+            self._activate_search_entry(entry)
+
+    def _apply_filter(self, text: str) -> None:
+        normalized_text = text.strip()
+        if not normalized_text:
+            self._hide_search_results_popup()
+            return
+        self._populate_search_results(self._matched_search_entries(normalized_text))
+        self._show_search_results_popup()
 
     def _handle_selection_change(self) -> None:
         item = self.sidebar_tree.currentItem()
@@ -1072,14 +1441,10 @@ class MicroToolkitWindow(QMainWindow):
         if plugin_id == "command_center":
             settings_page = self._plugin_content_widget("command_center")
             pending_section = self._pending_command_center_section
-            if settings_page is not None and pending_section:
-                if pending_section == "plugins":
-                    open_tab = getattr(settings_page, "open_plugins_tab", None)
-                else:
-                    open_tab = getattr(settings_page, "open_general_tab", None)
-                if callable(open_tab):
-                    open_tab()
+            if pending_section:
+                self._open_command_center_section_on_widget(settings_page, pending_section)
             self._pending_command_center_section = None
+        self._hide_search_results_popup()
         self._sync_system_toolbar_selection(plugin_id)
         if plugin_id in SYSTEM_TOOLBAR_PLUGIN_IDS:
             self.sidebar_tree.blockSignals(True)
@@ -1304,28 +1669,26 @@ class MicroToolkitWindow(QMainWindow):
         self.restore_from_tray()
         self.search_input.setFocus()
         self.search_input.selectAll()
+        if self.search_input.text().strip():
+            self._apply_filter(self.search_input.text())
+
+    def open_command_center_section(self, section_id: str) -> None:
+        section = str(section_id or "general").strip().lower()
+        if section not in {"general", "plugins", "quick_access", "shortcuts"}:
+            section = "general"
+        self._pending_command_center_section = section
+        self.open_plugin("command_center")
+        if self._pending_command_center_section == section:
+            settings_page = self._plugin_content_widget("command_center")
+            if self._open_command_center_section_on_widget(settings_page, section):
+                self._pending_command_center_section = None
+        self._sync_system_toolbar_selection("plugin_manager" if section == "plugins" else "command_center")
 
     def open_plugin_manager(self) -> None:
-        self._pending_command_center_section = "plugins"
-        self.open_plugin("command_center")
-        settings_page = self._plugin_content_widget("command_center")
-        if settings_page is not None:
-            open_plugins_tab = getattr(settings_page, "open_plugins_tab", None)
-            if callable(open_plugins_tab):
-                open_plugins_tab()
-                self._pending_command_center_section = None
-        self._sync_system_toolbar_selection("command_center")
+        self.open_command_center_section("plugins")
 
     def open_command_center(self) -> None:
-        self._pending_command_center_section = "general"
-        self.open_plugin("command_center")
-        settings_page = self._plugin_content_widget("command_center")
-        if settings_page is not None:
-            open_general_tab = getattr(settings_page, "open_general_tab", None)
-            if callable(open_general_tab):
-                open_general_tab()
-                self._pending_command_center_section = None
-        self._sync_system_toolbar_selection("command_center")
+        self.open_command_center_section("general")
 
     def open_settings_center(self) -> None:
         self.open_command_center()
@@ -1550,10 +1913,31 @@ class MicroToolkitWindow(QMainWindow):
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
         self._schedule_save_activity_dock_state()
+        if getattr(self, "search_results_popup", None) is not None and self.search_results_popup.isVisible():
+            self._reposition_search_results_popup()
 
     def eventFilter(self, watched: object, event: QEvent) -> bool:
+        if event.type() == QEvent.Type.MouseButtonPress:
+            self._handle_search_outside_click(event)
         if watched is self.log_dock and event.type() in {QEvent.Type.Resize, QEvent.Type.Move}:
             self._schedule_save_activity_dock_state()
+        if watched is self.search_input:
+            if event.type() in {QEvent.Type.FocusIn, QEvent.Type.MouseButtonPress}:
+                if self.search_input.text().strip() and not self.search_results_popup.isVisible():
+                    self._apply_filter(self.search_input.text())
+            if event.type() == QEvent.Type.KeyPress and isinstance(event, QKeyEvent):
+                if event.key() in {Qt.Key.Key_Down, Qt.Key.Key_Up}:
+                    if not self.search_results_popup.isVisible() and self.search_input.text().strip():
+                        self._apply_filter(self.search_input.text())
+                    if self.search_results_popup.isVisible():
+                        self._move_search_result_selection(1 if event.key() == Qt.Key.Key_Down else -1)
+                        return True
+                if event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter} and self.search_results_popup.isVisible():
+                    self._activate_current_search_result()
+                    return True
+                if event.key() == Qt.Key.Key_Escape and self.search_results_popup.isVisible():
+                    self._hide_search_results_popup()
+                    return True
         return super().eventFilter(watched, event)
 
     def _schedule_save_activity_dock_state(self) -> None:
@@ -1601,8 +1985,8 @@ class MicroToolkitWindow(QMainWindow):
         self.sidebar_card.setFixedWidth(width)
 
     def _sync_system_toolbar_selection(self, plugin_id: str | None) -> None:
-        active_id = plugin_id if plugin_id in SYSTEM_TOOLBAR_PLUGIN_IDS else None
-        if plugin_id == "command_center":
+        active_id = "plugin_manager" if plugin_id == "plugin_manager" else (plugin_id if plugin_id in SYSTEM_TOOLBAR_PLUGIN_IDS else None)
+        if plugin_id in {"command_center", "plugin_manager"}:
             settings_page = self._plugin_content_widget("command_center")
             current_section_id = getattr(settings_page, "current_section_id", None)
             if callable(current_section_id) and current_section_id() == "plugins":
@@ -1706,6 +2090,12 @@ class MicroToolkitWindow(QMainWindow):
         self._apply_shell_texts()
         current_plugin_id = self.current_plugin_id
         self.refresh_sidebar()
+        self.search_results_popup.setLayoutDirection(self.services.i18n.layout_direction())
+        self.search_results_list.setLayoutDirection(self.services.i18n.layout_direction())
+        if self.search_input.text().strip():
+            self._apply_filter(self.search_input.text())
+        else:
+            self._hide_search_results_popup()
         if current_plugin_id is not None and current_plugin_id in self.plugin_by_id:
             if current_plugin_id not in SYSTEM_TOOLBAR_PLUGIN_IDS:
                 self._select_plugin_item(current_plugin_id)
@@ -1726,6 +2116,8 @@ class MicroToolkitWindow(QMainWindow):
                 self._normalize_theme_styles(widget)
             self._stale_theme_pages.discard(plugin_id)
         self.refresh_plugin_visuals()
+        if self.search_input.text().strip():
+            self._apply_filter(self.search_input.text())
 
     def _confirm_exit(self) -> bool:
         if not bool(self.services.config.get("confirm_on_exit")):

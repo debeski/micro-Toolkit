@@ -858,6 +858,10 @@ class CommandCenterPage(QWidget):
             self.reset_plugins_button,
             self.refresh_plugins_button,
         ]
+        self._developer_plugin_action_buttons = [
+            self.import_file_button,
+            self.import_folder_button,
+        ]
         layout.addLayout(self.plugins_actions_layout)
         self._apply_responsive_layout(force=True)
 
@@ -887,6 +891,7 @@ class CommandCenterPage(QWidget):
         self._refresh_shortcut_status()
         self._refresh_backup_status()
         self._suspend_live_updates = False
+        self._sync_developer_plugin_actions()
         self._apply_responsive_layout(force=True)
 
     def _selected_theme_color(self) -> str:
@@ -1898,6 +1903,8 @@ class CommandCenterPage(QWidget):
         if self._suspend_live_updates:
             return
         self.services.set_developer_mode(bool(checked))
+        self._sync_developer_plugin_actions()
+        self._apply_responsive_layout(force=True)
 
     def _reset_general_defaults(self) -> None:
         if not self._confirm_risky(
@@ -2693,6 +2700,23 @@ class CommandCenterPage(QWidget):
         self.tabs.updateGeometry()
         self.updateGeometry()
 
+    def _sync_developer_plugin_actions(self) -> None:
+        enabled = self.services.developer_mode_enabled()
+        for button in getattr(self, "_developer_plugin_action_buttons", []):
+            button.setHidden(not enabled)
+
+    def _visible_plugin_action_buttons(self) -> list[QPushButton]:
+        if not hasattr(self, "_plugin_action_buttons"):
+            return []
+        developer_enabled = self.services.developer_mode_enabled()
+        developer_only = set(getattr(self, "_developer_plugin_action_buttons", []))
+        buttons: list[QPushButton] = []
+        for button in self._plugin_action_buttons:
+            if button in developer_only and not developer_enabled:
+                continue
+            buttons.append(button)
+        return buttons
+
     def _apply_responsive_layout(self, *, force: bool = False) -> None:
         bucket = width_breakpoint(self.width(), compact_max=760, medium_max=1180)
         structure_changed = force or bucket != self._responsive_bucket
@@ -2744,11 +2768,12 @@ class CommandCenterPage(QWidget):
             visible_parent_width(self),
             self.plugins_tab.contentsRect().width() or self.plugins_tab.width() or self.width(),
         )
-        plugin_button_widths = [button.sizeHint().width() for button in self._plugin_action_buttons]
+        visible_plugin_buttons = self._visible_plugin_action_buttons()
+        plugin_button_widths = [button.sizeHint().width() for button in visible_plugin_buttons]
         plugin_spacing = self.plugins_actions_layout.horizontalSpacing()
         required_for_single_row = sum(plugin_button_widths) + (plugin_spacing * max(0, len(plugin_button_widths) - 1))
         plugin_columns = len(plugin_button_widths) if available_width >= required_for_single_row else 4
-        for index, button in enumerate(self._plugin_action_buttons):
+        for index, button in enumerate(visible_plugin_buttons):
             self.plugins_actions_layout.addWidget(button, index // plugin_columns, index % plugin_columns)
         for column in range(plugin_columns):
             self.plugins_actions_layout.setColumnStretch(column, 1)
@@ -2765,8 +2790,16 @@ class CommandCenterPage(QWidget):
         return "general"
 
     def open_plugins_tab(self) -> None:
+        already_active = self.tabs.currentWidget() is self.plugins_tab
         self.tabs.setCurrentWidget(self.plugins_tab)
-        self._populate_plugin_table()
+        if already_active:
+            self._populate_plugin_table()
+
+    def open_quick_access_tab(self) -> None:
+        self.tabs.setCurrentWidget(self.quick_access_tab)
+
+    def open_shortcuts_tab(self) -> None:
+        self.tabs.setCurrentWidget(self.shortcuts_tab)
 
     def open_general_tab(self) -> None:
         self.tabs.setCurrentWidget(self.general_tab)

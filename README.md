@@ -2,7 +2,7 @@
 
 Micro Toolkit is a fast, cross-platform, multilingual, plugin-driven desktop companion for day-to-day office and home use. It is built with `PySide6` and designed to feel like a native desktop application: quick to open, responsive while working, tray-friendly, and flexible enough to grow through drop-in plugins.
 
-Current app version: `0.7.17`
+Current app version: `0.8.0`
 
 ## Overview
 
@@ -24,8 +24,9 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - Lazy plugin discovery and lazy page creation for fast startup
 - English and Arabic support with RTL-aware layout direction
 - Five curated theme colors with a dark-mode toggle
+- Global top-bar search with live results and direct page/section navigation
 - Live preview for language, direction, density, and UI scaling
-- Top-bar visual refresh indicator with active-page-first restyling
+- Shell-owned top-bar visual refresh spinner, busy cursor, and status-bar task progress
 - Standardized per-user runtime storage across Windows, macOS, and Linux
 - Tray integration for all-day companion use
 - Persistent `Clip-Monitor` companion so clipboard capture can stay alive after the main window closes
@@ -34,7 +35,9 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - Workflow engine and CLI command surface
 - Archive-first custom plugin packaging and sharing
 - Custom plugin dependency sidecars with install/repair flow in Plugins
-- Plugin-local translations through sidecar locale files
+- Plugin-local translations through sidecar locale files plus shared `bind_tr(...)`, `tr(...)`, and `safe_tr(...)` helpers
+- Shared `apply_page_chrome(...)` and semantic UI classes for low-boilerplate plugin pages
+- Four-level shell surface model with shared card/control/console/preview styling
 - Opt-in plugin display name and icon customization
 - Headless tool commands for workflows and automation
 - Capability-based elevated broker for future admin/root operations
@@ -151,6 +154,13 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - While inspect mode is active, use right-click navigation to move around the app and left-click to select the target widget
 - Useful for debugging layout, theming, and shell paint issues without external Qt tooling
 
+## Shell Navigation
+
+- `Ctrl+K` focuses the global top-bar search
+- Search matches app pages plus key `Command Center` sections such as `Plugins`, `Quick Access`, and `Shortcuts`
+- Results appear live in a dropdown, follow the current RTL/LTR direction, and open directly into the selected page or section
+- Standard page loading, theme refresh, and language refresh work through the same shell-owned spinner/progress system
+
 ## Architecture
 
 ### Package Layout
@@ -257,8 +267,26 @@ The shell handles:
 - layout direction
 - RTL-aware app chrome
 - plugin metadata localization
-- plugin UI strings through `services.plugin_text(...)`
+- shared translator helpers through `bind_tr(...)`, `tr(...)`, and `safe_tr(...)`
 - global Amiri-based font stack with fallbacks
+
+Recommended widget usage:
+
+```python
+from micro_toolkit.core.plugin_api import bind_tr
+
+tr = bind_tr(services, "my_plugin")
+title = QLabel(tr("ui.title", "My Plugin"))
+```
+
+Recommended helper/task usage:
+
+```python
+from micro_toolkit.core.plugin_api import safe_tr, tr
+
+context.log(tr(services, "my_plugin", "log.start", "Starting task..."))
+message = safe_tr(translate, "error.failed", "Task failed.")
+```
 
 ## Performance Model
 
@@ -458,11 +486,14 @@ class MyPlugin(QtPlugin):
 
 Use:
 
-- `from micro_toolkit.core.plugin_api import QtPlugin`
+- `from micro_toolkit.core.plugin_api import QtPlugin, bind_tr`
+- `from micro_toolkit.core.plugin_api import tr` for helper/task code that already has `services` and `plugin_id`
+- `from micro_toolkit.core.plugin_api import safe_tr` when a background/helper path accepts an optional translation callable
+- `from micro_toolkit.core.page_style import apply_page_chrome` for standard page title/description/card styling
+- `from micro_toolkit.core.page_style import apply_semantic_class` only for approved special surfaces such as console, preview, chart, or hero variants
 - `from micro_toolkit.core.command_runtime import HeadlessTaskContext` for headless command work
 - `from micro_toolkit.core.app_utils import ...` for shared helpers where appropriate
-- `services.run_task(...)` for background work
-- `services.plugin_text(...)` for localized plugin strings
+- `services.run_task(...)` for background work with automatic shell progress
 - `services.request_elevated(...)` only when a capability-based elevated operation is truly required
 - `register_elevated_capabilities(...)` only for narrow, explicit elevated operations
 - `allow_name_override` and `allow_icon_override` when the plugin should permit user-side display customization
@@ -472,7 +503,53 @@ Avoid:
 
 - imports from non-existent folders
 - top-level heavy imports if they are only needed when the user actually runs the tool
+- defining per-plugin `_pt` / `_tr` wrappers when `bind_tr(...)`, `tr(...)`, and `safe_tr(...)` already cover page and task translation needs
+- raw per-page styling for standard controls when shared page/style helpers already cover the layout
+- plugin-local inline progress bars for ordinary tasks; the shell owns routine loading/progress affordances
 - doing large file/network/CPU work directly on the UI thread
+
+### Zero-Boilerplate Page Pattern
+
+For a standard content page, the preferred pattern is:
+
+```python
+from PySide6.QtWidgets import QFrame, QLabel, QVBoxLayout, QWidget
+
+from micro_toolkit.core.page_style import apply_page_chrome
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr
+
+
+class MyPlugin(QtPlugin):
+    plugin_id = "my_plugin"
+    name = "My Plugin"
+    description = "Example plugin page."
+    category = "General"
+
+    def create_widget(self, services) -> QWidget:
+        tr = bind_tr(services, self.plugin_id)
+        palette = services.theme_manager.current_palette()
+
+        page = QWidget()
+        layout = QVBoxLayout(page)
+
+        title_label = QLabel(tr("title", "My Plugin"))
+        description_label = QLabel(tr("description", "Example plugin page."))
+        card = QFrame()
+
+        layout.addWidget(title_label)
+        layout.addWidget(description_label)
+        layout.addWidget(card)
+
+        apply_page_chrome(
+            palette,
+            title_label=title_label,
+            description_label=description_label,
+            cards=(card,),
+        )
+        return page
+```
+
+Standard controls inside that card inherit the shared global control styling automatically. Reserve `apply_semantic_class(...)` for genuinely special surfaces such as console outputs, previews, charts, or hero-style cards.
 
 ### How Custom Plugin Review Works
 
@@ -542,7 +619,10 @@ Example `my_plugin.en.json`:
 Example usage inside the widget:
 
 ```python
-title = QLabel(services.plugin_text("my_plugin", "ui.title", "My Plugin"))
+from micro_toolkit.core.plugin_api import bind_tr
+
+tr = bind_tr(services, "my_plugin")
+title = QLabel(tr("ui.title", "My Plugin"))
 ```
 
 You can also keep a tiny inline `translations = {...}` fallback in the plugin class, but sidecar files are the preferred pattern.
@@ -668,9 +748,15 @@ self.services.run_task(
     on_result=self._handle_result,
     on_error=self._handle_error,
     on_finished=self._finish_run,
-    on_progress=self._handle_progress,
 )
 ```
+
+Notes:
+
+- call `context.progress(...)` inside the worker when you have real measurable progress
+- the shared status-bar progress bar is updated automatically for ordinary plugin tasks
+- the top-bar spinner and busy cursor remain shell-owned, so routine plugins usually do not need inline progress widgets
+- `on_progress` is still available when a page truly needs extra local behavior in addition to the shared shell progress
 
 ### Elevated Broker Capabilities
 
@@ -831,48 +917,40 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 ## Version History
 
-| Version | Status | Highlights |
+| Version | Date | Highlights |
 | --- | --- | --- |
-| 0.7.17 | Current | Added explicit compact sizing caps for shell toolbar buttons and inline auto-raise icon buttons so lingering stylesheet minimums can no longer stretch them taller than their intended footprint in top bars and table action cells. |
-| 0.7.16 | Previous milestone | Corrected the global button theming split so lightweight auto-raise icon buttons no longer inherit the heavier regular-button box styling, preventing extra vertical bloat in compact shell bars and table action cells. |
-| 0.7.15 | Previous milestone | Tightened the shared auto-raise icon-button theme rule so lightweight action icons keep the new hover treatment without inflating row heights or overflowing compact containers like the shell utility bar and table action cells. |
-| 0.7.14 | Previous milestone | Fixed the global hover treatment for lightweight auto-raise icon buttons so plugin action icons like those in `Wi-Fi Profiles` and `About Info` no longer collapse or distort when hovered. |
-| 0.7.13 | Previous milestone | Corrected the compact shell utility bar sizing so the top system action cluster now keys off the bar's real inner height instead of a smaller leftover button size, bringing the icon rail into proper visual alignment with the rest of the shell chrome. |
-| 0.7.12 | Previous milestone | Refined the compact shell header again by letting the top system-icons host use the full available utility-bar height, so the action cluster sits properly within the bar instead of looking like a shorter nested strip. |
-| 0.7.11 | Previous milestone | Finished aligning the compact shell chrome by bringing the top utility bar back to the same height as the sidebar header, so the two top rails now read as one consistent frame. |
-| 0.7.10 | Previous milestone | Compacted the shell chrome further so the top utility bar and header card now better match the slimmer sidebar rhythm, and cleaned up `Dev Lab` by making its tools card read more clearly with an explicit title and a balanced inspect/text-unlock action row. |
-| 0.7.9 | Previous milestone | Refined the global interaction layer so the cursor now switches to a busy state during loading and visual refresh work, sidebar rows use pointer feedback, and checkbox pointer hit-areas are limited to the actual control and label instead of the full row width. |
-| 0.7.8 | Previous milestone | Added a global interaction pass for action controls so buttons, checkboxes, dropdowns, and related UI elements now share theme-colored hover feedback and pointer cursors more consistently across the app. |
-| 0.7.7 | Previous milestone | Compacted the shell sidebar with a slimmer rail, tighter section rhythm, smaller brand header treatment, and denser item spacing so navigation feels lighter without losing clarity. |
-| 0.7.6 | Previous milestone | Fixed `Command Center` tooltips so Settings now uses the same theme-aware tooltip treatment as the rest of the shell instead of falling back to a dark tooltip style in light mode. |
-| 0.7.5 | Previous milestone | Fixed the immediate-save regression in `Command Center -> General` so theme, language, density, and UI scaling now persist correctly after restart while still applying live as you change them. |
-| 0.7.4 | Previous milestone | Simplified `Command Center` so `General` and `Shortcuts` now save directly as you change them, removed the redundant save buttons, and made Plugins trust, enabled, and hidden toggles apply immediately row-by-row instead of waiting behind a separate apply step. |
-| 0.7.3 | Previous milestone | Fixed the next `Clip-Monitor` handoff regressions: the main app now yields tray ownership cleanly before the monitor takes over so it does not leave a dead duplicate tray icon behind, and monitor helper preference is now carried over explicitly instead of being treated like a fresh Linux elevation request during normal monitor enable/quit flows. |
-| 0.7.2 | Internal milestone | Fixed the first Clip-Monitor follow-up regressions: opening `Clip Snip` from the quick panel or tray now restores the app instead of only switching its hidden page, the app and monitor tray status rows render more reliably on Linux themes, the monitor tray menu no longer rebuilds itself while open, and the monitor regained Linux elevated-helper support for the global quick clipboard shortcut. |
-| 0.7.1 | Internal milestone | Rebuilt clipboard capture around a persistent `Clip-Monitor` companion so history no longer depends on opening the `Clip Snip` page or keeping the main app window alive. Added a new `Enable Clip-Monitor` setting in both `Clip Snip` and `Command Center`, kept a single tray surface with `App` / `Clip-Monitor` ON/OFF status rows, upgraded the quick clipboard panel with an `Open Clip Snip` action, and separated tray behavior from clipboard continuity so quitting the app can leave the monitor running when enabled. |
-| 0.7.0 | Stable milestone | Added custom plugin dependency sidecars (`.deps` / `.deps.txt`), plugin-specific dependency install and repair actions in `Settings -> Plugins`, combined plugin review and dependency status reporting, and prepared packaged builds to bundle pip support for dependency installs. Promoted the existing zip archive flow into the primary custom plugin package format, reframed the Plugins UI and README guidance around package-based sharing, and de-emphasized loose file and folder imports as development-oriented paths while preserving manual drop-in support. |
-| 0.6.5 | Internal milestone | Completed full Arabic localization and Western numeral enforcement for all IT Utilities plugins (`Credential Scanner`, `Network Port Scanner`, `Privacy Data Shredder`, `System Audit`, and `Wi-Fi Profiles`). Migrated plugin-local translations to external JSON catalogs and implemented real-time UI refreshing via the `language_changed` signal. |
-| 0.6.4 | Internal milestone | Reworked visual refresh handling so theme, density, and UI-scaling changes use a top-bar spinner instead of the centered full-window loader, refresh the active page first, and lazily rebuild already-created hidden pages when they are reopened. Also reduced theme refresh overhead by collapsing duplicate stylesheet application and caching app font loading. |
-| 0.6.3 | Internal milestone | Standardized runtime storage onto per-user platform paths, restored the `Default startup page` option in `Settings -> General`, changed the Plugins table to use the page scrollbar instead of its own horizontal scrollbar, tightened several responsive layout breakpoints across Dashboard, Clipboard, Workflows, and Settings, improved the dock Terminal so typing feels more native and the prompt is visibly styled again, and updated macOS packaging/startup behavior with an app-bundle target plus more mac-aware tray and login-launch handling. |
-| 0.6.2 | Internal milestone | Refined the shell and workflow UX: moved quick access management fully into Settings, replaced the dashboard quick-launch area with a more useful workspace pulse panel, improved Workflow Studio with clearer page structure and a command reference table, added Inspector text-unlock mode for selectable static labels, made exit confirmation remember an `Always ask on exit` preference, and fixed several UI behavior bugs across clipboard history, safe scrolling controls, and sidebar selection. |
-| 0.6.1 | Internal milestone | Expanded the shell into a top-utility-bar dashboard layout, added the developer Inspector, rebuilt Clipboard Manager around multi-format capture and pinned/category support, renamed and refreshed the core audit tools (`Folder Mapper`, `Deep-Scan Auditor`, `Sequence Auditor`, and `Data-Link Auditor`), added Color Picker and Wi-Fi Profiles improvements, introduced terminal/console dock switching, and tightened builtin-plugin manifest verification plus custom-plugin review flow. |
-| 0.6.0 | Stable milestone | Added the dashboard shell, sidebar quick access management, global Amiri font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |
-| 0.5.2 | Internal milestone | Added Qt-Material as the default theme, discarded old custom theme engine (kept only basic required functions), added custom-plugins display-name, icon, and locale sidecar support. |
-| 0.5.1 | Internal milestone | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |
-| 0.5.0 | Stable milestone | First full Micro Toolkit desktop release on `PySide6`, with lazy plugin engine, multilingual shell, tray integration, workflows, CLI, plugin packaging, and cross-platform `onedir` build flow. |
-| 0.4.5 | Internal milestone | Added custom plugin import/export, enable/disable/hide controls, Introduced some pdf related plugins, and improved the plugin engine performance. |
-| 0.4.4 | Internal milestone | Introduced headless tool commands for workflows and CLI plus the quick clipboard panel with shortcut and tray access. |
-| 0.4.3 | Internal milestone | Rebuilding the rest of the discontinued toolkit's plugins for the new Plugin Engine built with Qt. |
-| 0.4.2 | Internal milestone | Rebuilding the system tools suite into the new plugin engine and made the desktop shell self-contained. |
-| 0.4.1 | Internal milestone | Added settings, themes, language switching, tray behavior, autostart, workflow studio, and command registry foundations. |
-| 0.4.0 | **discontinued** | *Tkinter app was discontinued in favor of PySide6.*, Started development of the new plugin engine, and underlying architecture. |
-| 0.3.0 | Major update | Added new Clipboard plugin with Auto-Capture, Improved workflow studio, Improved overall app layout and style. |
-| 0.2.4 | Minor update | Introduced new Plugin Manager for managing plugins, New Hotkeys for global and application scoped shortcuts. |
-| 0.2.3 | Minor update | Added some Networks and IT plugins for port scanning, wifi info, etc. |
-| 0.2.2 | Minor update | Revamped Sidebr, added a dedicated system-bar inside it for system tools, Improved Animations, Added loading spinner, Added multiple new utility plugins |
-| 0.2.1 | Minor update | rebuilt and added Image-Tagger as a plugin, Embedded smart luminance rendering tags |
-| 0.2.0 | Major update | Rebranded to Micro Toolkit - a plugin script engine, introduced new plugins "e.g. Folder Exporter, Duplicate Finder, Missing Sequence Finder", added workflow studio, and command registry foundations. |
-| 0.1.3 | Minor update | Added dynamic UI alignment mirroring, Ensured single-app instance, Re-assigned Tray-clicks directly to Application |
-| 0.1.2 | Minor update | Added dynamic Real-Time Arabic/English Localization, Bound application translations directly to Options preferences, Upgraded the interface to a tabbed modern sidebar layout using `customtkinter` |
-| 0.1.1 | Minor update | Added "Open" buttons for seamless UX, Implemented robust Options menu, Default Paths, and System Tray toggleability |
-| 0.1.0 | Initial commit | Initial commit as "PDF/File Validator" |
+| 0.8.0 | 2026-03-28 | Introduced the zero-boilerplate UI system: shared four-level shell surfaces (`base_bg`, `component_bg`, `card_bg`, `element_bg`), shared semantic classes for standard and special surfaces, widespread plugin migration to `bind_tr(...)`, `tr(...)`, `safe_tr(...)`, and `apply_page_chrome(...)`, a new app-wide top-bar search dropdown that navigates directly to plugins and `Command Center` sections, and unified shell-owned loading/progress feedback through the top-bar spinner, busy cursor, and status-bar progress bar. |
+| 0.7.8 | 2026-03-27 | Finished the compact icon-button stabilization pass across the shell and plugins, separating lightweight auto-raise action icons from regular buttons so hover states no longer inflate rows, distort compact containers, or overflow shell utility bars and table action cells. |
+| 0.7.7 | 2026-03-27 | Reworked the compact shell chrome so the utility bar, system-icon rail, and header rhythm align more cleanly, while also tightening `Dev Lab` card layout and the overall top-shell proportions. |
+| 0.7.6 | 2026-03-27 | Added a broader global interaction layer for buttons, checkboxes, dropdowns, and related controls, including shared hover feedback, pointer behavior, and busy-cursor polish during loading and visual refresh work. |
+| 0.7.5 | 2026-03-27 | Compacted the shell sidebar with a slimmer rail, tighter section rhythm, smaller brand header treatment, and denser item spacing so navigation feels lighter without losing clarity. |
+| 0.7.4 | 2026-03-27 | Simplified `Command Center` so settings and shortcuts apply live, plugin row trust/enabled/hidden changes apply immediately, persistence regressions were corrected, and the page’s tooltip treatment was brought back onto the shared shell theme. |
+| 0.7.3 | 2026-03-27 | Fixed the next `Clip-Monitor` handoff regressions: the main app now yields tray ownership cleanly before the monitor takes over so it does not leave a dead duplicate tray icon behind, and monitor helper preference is now carried over explicitly instead of being treated like a fresh Linux elevation request during normal monitor enable/quit flows. |
+| 0.7.2 | 2026-03-27 | Fixed the first Clip-Monitor follow-up regressions: opening `Clip Snip` from the quick panel or tray now restores the app instead of only switching its hidden page, the app and monitor tray status rows render more reliably on Linux themes, the monitor tray menu no longer rebuilds itself while open, and the monitor regained Linux elevated-helper support for the global quick clipboard shortcut. |
+| 0.7.1 | 2026-03-27 | Rebuilt clipboard capture around a persistent `Clip-Monitor` companion so history no longer depends on opening the `Clip Snip` page or keeping the main app window alive. Added a new `Enable Clip-Monitor` setting in both `Clip Snip` and `Command Center`, kept a single tray surface with `App` / `Clip-Monitor` ON/OFF status rows, upgraded the quick clipboard panel with an `Open Clip Snip` action, and separated tray behavior from clipboard continuity so quitting the app can leave the monitor running when enabled. |
+| 0.7.0 | 2026-03-27 | Added custom plugin dependency sidecars (`.deps` / `.deps.txt`), plugin-specific dependency install and repair actions in `Settings -> Plugins`, combined plugin review and dependency status reporting, and prepared packaged builds to bundle pip support for dependency installs. Promoted the existing zip archive flow into the primary custom plugin package format, reframed the Plugins UI and README guidance around package-based sharing, and de-emphasized loose file and folder imports as development-oriented paths while preserving manual drop-in support. |
+| 0.6.5 | 2026-03-26 | Completed full Arabic localization and Western numeral enforcement for all IT Utilities plugins (`Credential Scanner`, `Network Port Scanner`, `Privacy Data Shredder`, `System Audit`, and `Wi-Fi Profiles`). Migrated plugin-local translations to external JSON catalogs and implemented real-time UI refreshing via the `language_changed` signal. |
+| 0.6.4 | 2026-03-26 | Reworked visual refresh handling so theme, density, and UI-scaling changes use a top-bar spinner instead of the centered full-window loader, refresh the active page first, and lazily rebuild already-created hidden pages when they are reopened. Also reduced theme refresh overhead by collapsing duplicate stylesheet application and caching app font loading. |
+| 0.6.3 | 2026-03-26 | Standardized runtime storage onto per-user platform paths, restored the `Default startup page` option in `Settings -> General`, changed the Plugins table to use the page scrollbar instead of its own horizontal scrollbar, tightened several responsive layout breakpoints across Dashboard, Clipboard, Workflows, and Settings, improved the dock Terminal so typing feels more native and the prompt is visibly styled again, and updated macOS packaging/startup behavior with an app-bundle target plus more mac-aware tray and login-launch handling. |
+| 0.6.2 | 2026-03-26 | Refined the shell and workflow UX: moved quick access management fully into Settings, replaced the dashboard quick-launch area with a more useful workspace pulse panel, improved Workflow Studio with clearer page structure and a command reference table, added Inspector text-unlock mode for selectable static labels, made exit confirmation remember an `Always ask on exit` preference, and fixed several UI behavior bugs across clipboard history, safe scrolling controls, and sidebar selection. |
+| 0.6.1 | 2026-03-26 | Expanded the shell into a top-utility-bar dashboard layout, added the developer Inspector, rebuilt Clipboard Manager around multi-format capture and pinned/category support, renamed and refreshed the core audit tools (`Folder Mapper`, `Deep-Scan Auditor`, `Sequence Auditor`, and `Data-Link Auditor`), added Color Picker and Wi-Fi Profiles improvements, introduced terminal/console dock switching, and tightened builtin-plugin manifest verification plus custom-plugin review flow. |
+| 0.6.0 | 2026-03-26 | Added the dashboard shell, sidebar quick access management, global Amiri font usage, live plugin display name/icon customization, and responsive shell/navigation refinements. Refactored Windows autostart to use the Registry, added an Inno Setup installer script, and implemented a Windows Mutex for reliable application shutdown during uninstallation. |
+| 0.5.2 | 2026-03-25 | Added Qt-Material as the default theme, discarded old custom theme engine (kept only basic required functions), added custom-plugins display-name, icon, and locale sidecar support. |
+| 0.5.1 | 2026-03-25 | Added Document Bridge, plugin-backed `Markdown -> DOCX` and `DOCX -> Markdown`, Linux hotkey helper architecture, capability-based elevated broker, and expanded custom plugin authoring guidance. |
+| 0.5.0 | 2026-03-25 | First full Micro Toolkit desktop release on `PySide6`, with lazy plugin engine, multilingual shell, tray integration, workflows, CLI, plugin packaging, and cross-platform `onedir` build flow. |
+| 0.4.5 | 2026-03-24 | Added custom plugin import/export, enable/disable/hide controls, Introduced some pdf related plugins, and improved the plugin engine performance. |
+| 0.4.4 | 2026-03-24 | Introduced headless tool commands for workflows and CLI plus the quick clipboard panel with shortcut and tray access. |
+| 0.4.3 | 2026-03-24 | Rebuilding the rest of the discontinued toolkit's plugins for the new Plugin Engine built with Qt. |
+| 0.4.2 | 2026-03-24 | Rebuilding the system tools suite into the new plugin engine and made the desktop shell self-contained. |
+| 0.4.1 | 2026-03-24 | Added settings, themes, language switching, tray behavior, autostart, workflow studio, and command registry foundations. |
+| 0.4.0 | 2026-03-24 | *Tkinter app was discontinued in favor of PySide6.*, Started development of the new plugin engine, and underlying architecture. |
+| 0.3.0 | 2026-03-22 | Added new Clipboard plugin with Auto-Capture, Improved workflow studio, Improved overall app layout and style. ***discontinued*** |
+| 0.2.4 | 2026-03-21 | Introduced new Plugin Manager for managing plugins, New Hotkeys for global and application scoped shortcuts. |
+| 0.2.3 | 2026-03-21 | Added some Networks and IT plugins for port scanning, wifi info, etc. |
+| 0.2.2 | 2026-03-21 | Revamped Sidebr, added a dedicated system-bar inside it for system tools, Improved Animations, Added loading spinner, Added multiple new utility plugins |
+| 0.2.1 | 2026-03-21 | rebuilt and added Image-Tagger as a plugin, Embedded smart luminance rendering tags |
+| 0.2.0 | 2026-03-21 | Rebranded to Micro Toolkit - a plugin script engine, introduced new plugins "e.g. Folder Exporter, Duplicate Finder, Missing Sequence Finder", added workflow studio, and command registry foundations. |
+| 0.1.3 | 2026-03-20 | Added dynamic UI alignment mirroring, Ensured single-app instance, Re-assigned Tray-clicks directly to Application |
+| 0.1.2 | 2026-03-20 | Added dynamic Real-Time Arabic/English Localization, Bound application translations directly to Options preferences, Upgraded the interface to a tabbed modern sidebar layout using `customtkinter` |
+| 0.1.1 | 2026-03-20 | Added "Open" buttons for seamless UX, Implemented robust Options menu, Default Paths, and System Tray toggleability |
+| 0.1.0 | 2026-03-20 | Initial commit as "PDF/File Validator" |

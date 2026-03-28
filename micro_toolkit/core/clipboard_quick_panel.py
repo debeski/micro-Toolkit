@@ -1,8 +1,9 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, QPoint, Qt
+from PySide6.QtCore import QEvent, QObject, QPoint, Qt
 from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtWidgets import (
+    QApplication,
     QHBoxLayout,
     QFrame,
     QLabel,
@@ -36,6 +37,9 @@ class ClipboardQuickPanel(QWidget):
         self._build_ui()
         self._refresh_entries()
         self.refresh_ui()
+        app = QApplication.instance()
+        if app is not None:
+            app.installEventFilter(self)
 
     def _tr(self, key: str, default: str) -> str:
         translator = getattr(self.services, "i18n", None)
@@ -165,6 +169,25 @@ class ClipboardQuickPanel(QWidget):
     def focusOutEvent(self, event) -> None:
         super().focusOutEvent(event)
         self.hide()
+
+    def eventFilter(self, watched, event) -> bool:
+        if not self.isVisible():
+            return super().eventFilter(watched, event)
+        if event.type() == QEvent.Type.MouseButtonPress:
+            global_pos = None
+            if hasattr(event, "globalPosition"):
+                try:
+                    global_pos = event.globalPosition().toPoint()
+                except Exception:
+                    global_pos = None
+            elif hasattr(event, "globalPos"):
+                try:
+                    global_pos = event.globalPos()
+                except Exception:
+                    global_pos = None
+            if global_pos is not None and not self.rect().contains(self.mapFromGlobal(global_pos)):
+                self.hide()
+        return super().eventFilter(watched, event)
 
     def _move_near_cursor(self) -> None:
         cursor_pos = QCursor.pos()

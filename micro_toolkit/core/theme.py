@@ -719,6 +719,11 @@ class ThemeManager(QObject):
         QWidget#UtilitySearchHost, QWidget#UtilityActionsHost {{
             background: transparent;
         }}
+        QFrame#ShellSearchResultsPopup {{
+            background: {palette.card_bg};
+            border: 1px solid {card_border};
+            border-radius: {surface_radius}px;
+        }}
         QFrame#HeaderCard {{
             background: {palette.component_bg};
             border: none;
@@ -821,6 +826,13 @@ class ThemeManager(QObject):
             border-radius: {surface_radius}px;
             color: {palette.text_primary};
         }}
+        QListWidget#ShellSearchResultsList {{
+            background: transparent;
+            border: none;
+            border-radius: 0px;
+            color: {palette.text_primary};
+            outline: 0;
+        }}
         QLineEdit, QPlainTextEdit, QTextEdit {{
             background: {palette.element_bg};
             background-color: {palette.element_bg};
@@ -906,8 +918,16 @@ class ThemeManager(QObject):
             border-radius: 10px;
             margin: 2px 0px;
         }}
+        QListWidget#ShellSearchResultsList::item {{
+            padding: 8px 10px;
+            border-radius: 10px;
+            margin: 1px 0px;
+        }}
         QTreeWidget::item:hover, QListWidget::item:hover {{
             background: {palette.card_bg};
+        }}
+        QListWidget#ShellSearchResultsList::item:hover {{
+            background: {palette.element_bg};
         }}
         QTreeWidget::item:selected, QListWidget::item:selected {{
             background: {palette.accent_soft};

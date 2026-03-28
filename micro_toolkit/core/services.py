@@ -357,12 +357,23 @@ class AppServices(QObject):
         return normalized
 
     def set_language(self, language: str) -> str:
-        self.i18n.set_language(language)
-        self.i18n.save_to_config()
-        if self.application is not None:
-            self.i18n.apply(self.application)
-        self.clip_monitor_manager.refresh_preferences()
-        return self.i18n.current_language()
+        requested_language = (language or "en").strip().lower() or "en"
+        if requested_language == self.i18n.current_language():
+            return self.i18n.current_language()
+
+        spinner_active = self.main_window is not None
+        if spinner_active:
+            self.main_window.begin_visual_refresh(self.i18n.tr("loading.switch_language", "Switching language..."))
+        try:
+            self.i18n.set_language(requested_language)
+            self.i18n.save_to_config()
+            if self.application is not None:
+                self.application.setLayoutDirection(self.i18n.layout_direction())
+            self.clip_monitor_manager.refresh_preferences()
+            return self.i18n.current_language()
+        finally:
+            if spinner_active:
+                self.main_window.end_visual_refresh()
 
     def restore_live_preferences_from_config(self) -> None:
         self.theme_manager.load_from_config()
