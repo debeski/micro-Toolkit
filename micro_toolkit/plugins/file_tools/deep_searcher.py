@@ -20,26 +20,23 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, tr
 
 
 def run_deep_search_task(context, services, plugin_id: str, folder_path: str, query: str, use_regex: bool):
-    def _pt(key: str, default: str, **kwargs) -> str:
-        return services.plugin_text(plugin_id, key, default, **kwargs)
-
     def _ensure_western(text: str) -> str:
         eastern = "٠١٢٣٤٥٦٧٨٩"
         western = "0123456789"
         trans = str.maketrans(eastern, western)
         return text.translate(trans)
 
-    context.log(_pt("log.start", "Searching '{folder}' for '{query}'...", folder=folder_path, query=query))
+    context.log(tr(services, plugin_id, "log.start", "Searching '{folder}' for '{query}'...", folder=folder_path, query=query))
 
     try:
         compiled = re.compile(query) if use_regex else None
     except re.error as exc:
-        raise ValueError(_pt("error.regex", "Invalid regular expression: {exc}", exc=str(exc))) from exc
+        raise ValueError(tr(services, plugin_id, "error.regex", "Invalid regular expression: {exc}", exc=str(exc))) from exc
 
     file_paths: list[str] = []
     for root, _, files in os.walk(folder_path):
@@ -47,7 +44,7 @@ def run_deep_search_task(context, services, plugin_id: str, folder_path: str, qu
             file_paths.append(os.path.join(root, file_name))
 
     if not file_paths:
-        raise ValueError(_pt("error.no_files", "No files found in the selected folder."))
+        raise ValueError(tr(services, plugin_id, "error.no_files", "No files found in the selected folder."))
 
     matches: list[tuple[str, int, str]] = []
     for index, file_path in enumerate(file_paths, start=1):
@@ -70,9 +67,9 @@ def run_deep_search_task(context, services, plugin_id: str, folder_path: str, qu
             for file_path, line_number, content in matches:
                 # Use Western numerals for line numbers in report
                 handle.write(f"[{file_path}:{_ensure_western(str(line_number))}] {content}\n")
-        context.log(_pt("log.report", "Saved search report to {path}", path=report_path))
+        context.log(tr(services, plugin_id, "log.report", "Saved search report to {path}", path=report_path))
 
-    context.log(_pt("log.done", "Deep search complete with {count} matches.", count=_ensure_western(str(len(matches)))))
+    context.log(tr(services, plugin_id, "log.done", "Deep search complete with {count} matches.", count=_ensure_western(str(len(matches)))))
     return {
         "query": query,
         "matches": matches,
@@ -97,13 +94,11 @@ class DeepSearcherPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._latest_report_path = None
         self._build_ui()
         self.services.i18n.language_changed.connect(self._refresh)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         self.main_layout = QVBoxLayout(self)
@@ -111,12 +106,10 @@ class DeepSearcherPage(QWidget):
         self.main_layout.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         self.main_layout.addWidget(self.title_label)
 
         self.desc_label = QLabel()
         self.desc_label.setWordWrap(True)
-        self.desc_label.setStyleSheet("font-size: 14px; color: #43535c;")
         self.main_layout.addWidget(self.desc_label)
 
         folder_row = QHBoxLayout()
@@ -168,25 +161,28 @@ class DeepSearcherPage(QWidget):
         self._refresh()
 
     def _refresh(self) -> None:
-        self.title_label.setText(self._pt("title", "Deep File Searcher"))
-        self.desc_label.setText(self._pt("description", "Search across text files under a folder and write a detailed plaintext report when matches are found."))
-        self.folder_input.setPlaceholderText(self._pt("folder.placeholder", "Select a folder to search..."))
-        self.browse_button.setText(self._pt("browse", "Browse"))
-        self.query_label_widget.setText(self._pt("query.label", "Query"))
-        self.query_input.setPlaceholderText(self._pt("query.placeholder", "String or regex pattern..."))
-        self.regex_checkbox.setText(self._pt("regex.checkbox", "Use regex"))
-        self.run_button.setText(self._pt("run.button", "Run Search"))
-        self.open_report_button.setText(self._pt("report.button", "Open Report"))
-        self.summary_label.setText(self._pt("summary.initial", "Choose a folder and query to begin."))
-        self.output.setPlaceholderText(self._pt("output.placeholder", "Match preview will appear here."))
+        self.title_label.setText(self.tr("title", "Deep File Searcher"))
+        self.desc_label.setText(self.tr("description", "Search across text files under a folder and write a detailed plaintext report when matches are found."))
+        self.folder_input.setPlaceholderText(self.tr("folder.placeholder", "Select a folder to search..."))
+        self.browse_button.setText(self.tr("browse", "Browse"))
+        self.query_label_widget.setText(self.tr("query.label", "Query"))
+        self.query_input.setPlaceholderText(self.tr("query.placeholder", "String or regex pattern..."))
+        self.regex_checkbox.setText(self.tr("regex.checkbox", "Use regex"))
+        self.run_button.setText(self.tr("run.button", "Run Search"))
+        self.open_report_button.setText(self.tr("report.button", "Open Report"))
+        self.summary_label.setText(self.tr("summary.initial", "Choose a folder and query to begin."))
+        self.output.setPlaceholderText(self.tr("output.placeholder", "Match preview will appear here."))
         self._apply_theme_styles()
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.desc_label.setStyleSheet(muted_text_style(palette))
-        self.summary_card.setStyleSheet(card_style(palette, radius=14))
-        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.desc_label,
+            cards=(self.summary_card,),
+            summary_label=self.summary_label,
+        )
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
@@ -194,7 +190,7 @@ class DeepSearcherPage(QWidget):
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
-            self._pt("dialog.browse", "Select Folder To Search"),
+            self.tr("dialog.browse", "Select Folder To Search"),
             str(self.services.default_output_path()),
         )
         if folder:
@@ -206,15 +202,15 @@ class DeepSearcherPage(QWidget):
         if not folder_path or not query:
             QMessageBox.warning(
                 self, 
-                self._pt("dialog.missing.title", "Missing Input"), 
-                self._pt("dialog.missing.body", "Choose a folder and enter a query.")
+                self.tr("dialog.missing.title", "Missing Input"), 
+                self.tr("dialog.missing.body", "Choose a folder and enter a query.")
             )
             return
 
         self.run_button.setEnabled(False)
         self.open_report_button.setEnabled(False)
         self.output.setPlainText("")
-        self.summary_label.setText(self._pt("summary.running", "Searching files..."))
+        self.summary_label.setText(self.tr("summary.running", "Searching files..."))
 
         self.services.run_task(
             lambda context: run_deep_search_task(
@@ -240,21 +236,21 @@ class DeepSearcherPage(QWidget):
             ]
             self.output.setPlainText("\n".join(preview_lines))
             self.summary_label.setText(
-                self._pt("summary.done", "Searched {files} files and found {matches} matches.", files=str(result['files_scanned']), matches=str(len(result['matches'])))
+                self.tr("summary.done", "Searched {files} files and found {matches} matches.", files=str(result['files_scanned']), matches=str(len(result['matches'])))
             )
             self.open_report_button.setEnabled(True)
             self.services.record_run(
                 self.plugin_id,
                 "SUCCESS",
-                self._pt("summary.done", "Searched {files} files and found {matches} matches.", files=str(result['files_scanned']), matches=str(len(result['matches']))),
+                self.tr("summary.done", "Searched {files} files and found {matches} matches.", files=str(result['files_scanned']), matches=str(len(result['matches']))),
             )
         else:
-            self.output.setPlainText(self._pt("output.none", "No matches found."))
-            self.summary_label.setText(self._pt("summary.done", "Searched {files} files and found {matches} matches.", files=str(result['files_scanned']), matches="0"))
+            self.output.setPlainText(self.tr("output.none", "No matches found."))
+            self.summary_label.setText(self.tr("summary.done", "Searched {files} files and found {matches} matches.", files=str(result['files_scanned']), matches="0"))
             self.services.record_run(
                 self.plugin_id,
                 "WARNING",
-                self._pt("output.none", "No matches found."),
+                self.tr("output.none", "No matches found."),
             )
 
     def _handle_error(self, payload: object) -> None:
@@ -262,7 +258,7 @@ class DeepSearcherPage(QWidget):
         self.output.setPlainText(message)
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.failed", "Deep search failed."), "ERROR")
+        self.services.log(self.tr("log.failed", "Deep search failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)

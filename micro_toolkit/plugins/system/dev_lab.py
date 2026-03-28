@@ -17,8 +17,8 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.icon_registry import icon_from_name
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome, apply_semantic_class, muted_text_style, section_title_style
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr
 
 
 class DevLabPlugin(QtPlugin):
@@ -40,6 +40,7 @@ class DevLabPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self.summary_label: QLabel | None = None
         self.status_label: QLabel | None = None
         self.path_list: QListWidget | None = None
@@ -57,9 +58,6 @@ class DevLabPage(QWidget):
         self.services.ui_inspector.text_unlock_changed.connect(self._handle_text_unlock_changed)
         self.services.i18n.language_changed.connect(self._apply_texts)
         self.services.theme_manager.theme_changed.connect(self._apply_styles)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -86,20 +84,19 @@ class DevLabPage(QWidget):
         button_row.setContentsMargins(0, 0, 0, 0)
         button_row.setSpacing(10)
 
-        self.inspect_button = QPushButton()
-        self.inspect_button.clicked.connect(self._toggle_inspecting)
-        button_row.addWidget(
-            self.inspect_button,
-            0,
-            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
-        )
-
-        button_row.addStretch(1)
-
         self.text_unlock_checkbox = QCheckBox()
         self.text_unlock_checkbox.toggled.connect(self._toggle_text_unlock)
         button_row.addWidget(
             self.text_unlock_checkbox,
+            0,
+            Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter,
+        )
+        button_row.addStretch(1)
+
+        self.inspect_button = QPushButton()
+        self.inspect_button.clicked.connect(self._toggle_inspecting)
+        button_row.addWidget(
+            self.inspect_button,
             0,
             Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter,
         )
@@ -144,6 +141,7 @@ class DevLabPage(QWidget):
         detail_layout.addWidget(self.summary_label)
         self.details_view = QPlainTextEdit()
         self.details_view.setReadOnly(True)
+        apply_semantic_class(self.details_view, "output_class")
         detail_layout.addWidget(self.details_view, 1)
         content_row.addWidget(detail_card, 2)
 
@@ -155,50 +153,37 @@ class DevLabPage(QWidget):
 
     def _apply_styles(self, *_args) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=800))
-        self.description_label.setStyleSheet(muted_text_style(palette, size=14))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.description_label,
+            cards=(self.control_card, self.path_card, self.detail_card),
+            summary_label=self.summary_label,
+            title_size=26,
+            title_weight=800,
+            description_size=14,
+            card_radius=16,
+        )
         self.control_title.setStyleSheet(section_title_style(palette, size=18))
         self.path_title.setStyleSheet(section_title_style(palette, size=18))
         self.details_title.setStyleSheet(section_title_style(palette, size=18))
-        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
         self.status_label.setStyleSheet(muted_text_style(palette, size=13))
-        for frame in (self.control_card, self.path_card, self.detail_card):
-            frame.setStyleSheet(card_style(palette, radius=16))
-        self.copy_button.setStyleSheet(
-            f"""
-            QPushButton {{
-                background: {palette.surface_alt_bg};
-                color: {palette.text_primary};
-                border: 1px solid {palette.border};
-                border-radius: 10px;
-                padding: 5px 10px;
-                font-weight: 600;
-            }}
-            QPushButton:hover {{
-                border-color: {palette.accent};
-                background: {palette.accent_soft};
-            }}
-            QPushButton:disabled {{
-                color: {palette.text_muted};
-            }}
-            """
-        )
         self._reset_copy_button_text()
 
     def _apply_texts(self, *_args) -> None:
-        self.title_label.setText(self._pt("title", "Dev Lab"))
+        self.title_label.setText(self.tr("title", "Dev Lab"))
         self.description_label.setText(
-            self._pt(
+            self.tr(
                 "description",
                 "Inspect live widgets in the running interface. Start inspect mode, hover the UI, then left-click a widget to capture its structure, palette, and stylesheet details. If you need to move to another page first, use right-click navigation while inspect mode stays active.",
             )
         )
-        self.path_title.setText(self._pt("path.title", "Parent Chain"))
-        self.details_title.setText(self._pt("details.title", "Widget Details"))
-        self.control_title.setText(self._pt("tools.title", "Tools"))
+        self.path_title.setText(self.tr("path.title", "Parent Chain"))
+        self.details_title.setText(self.tr("details.title", "Widget Details"))
+        self.control_title.setText(self.tr("tools.title", "Tools"))
         self._reset_copy_button_text()
         self.text_unlock_checkbox.setText(
-            self._pt("text_unlock", "Unlock static text selection across the app")
+            self.tr("text_unlock", "Unlock static text selection across the app")
         )
         self._refresh_state()
 
@@ -213,26 +198,26 @@ class DevLabPage(QWidget):
         self.text_unlock_checkbox.setEnabled(enabled)
         self.text_unlock_checkbox.blockSignals(False)
         self.inspect_button.setText(
-            self._pt("inspect.stop", "Stop inspecting") if inspecting else self._pt("inspect.start", "Start inspecting")
+            self.tr("inspect.stop", "Stop inspecting") if inspecting else self.tr("inspect.start", "Start inspecting")
         )
         if not enabled:
             self.status_label.setText(
-                self._pt("status.locked", "Developer mode is off. Enable it from Command Center to use Dev Lab.")
+                self.tr("status.locked", "Developer mode is off. Enable it from Command Center to use Dev Lab.")
             )
         elif inspecting:
             self.status_label.setText(
-                self._pt("status.live", "Inspect mode is active. Hover the app, left-click to capture a widget, and use right-click navigation if you need to move to another page first. Press Esc to cancel.")
+                self.tr("status.live", "Inspect mode is active. Hover the app, left-click to capture a widget, and use right-click navigation if you need to move to another page first. Press Esc to cancel.")
             )
         elif text_unlock:
             self.status_label.setText(
-                self._pt("status.text_unlock", "Inspector text unlock is active. Static app text can now be highlighted and copied where supported.")
+                self.tr("status.text_unlock", "Inspector text unlock is active. Static app text can now be highlighted and copied where supported.")
             )
         else:
             self.status_label.setText(
-                self._pt("status.ready", "Inspector is ready. Start inspect mode to capture a widget.")
+                self.tr("status.ready", "Inspector is ready. Start inspect mode to capture a widget.")
             )
         if not self._last_snapshot:
-            self.summary_label.setText(self._pt("summary.empty", "No widget selected yet."))
+            self.summary_label.setText(self.tr("summary.empty", "No widget selected yet."))
             self.details_view.setPlainText("")
             self.path_list.clear()
 
@@ -252,7 +237,7 @@ class DevLabPage(QWidget):
         object_name = str(payload.get("object_name") or "")
         geometry = str(payload.get("geometry") or "")
         self.summary_label.setText(
-            self._pt(
+            self.tr(
                 "summary.value",
                 "Selected: {class_name}{object_suffix}\nGeometry: {geometry}",
                 class_name=class_name,
@@ -285,11 +270,11 @@ class DevLabPage(QWidget):
         check_icon = icon_from_name("check", self)
         if check_icon is not None:
             self.copy_button.setIcon(check_icon)
-        self.copy_button.setText(self._pt("copy.done", "Copied"))
+        self.copy_button.setText(self.tr("copy.done", "Copied"))
         if self._copy_feedback_timer is not None:
             self._copy_feedback_timer.start(1400)
 
     def _reset_copy_button_text(self) -> None:
         copy_icon = icon_from_name("copy", self)
         self.copy_button.setIcon(copy_icon or self.copy_button.icon())
-        self.copy_button.setText(self._pt("copy", "Copy snapshot"))
+        self.copy_button.setText(self.tr("copy", "Copy snapshot"))

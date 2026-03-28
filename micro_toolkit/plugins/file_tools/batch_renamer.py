@@ -18,25 +18,22 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, tr
 
 
 def batch_rename_task(context, services, plugin_id: str, target_dir: str, search_rule: str, replace_str: str, use_regex: bool):
-    def _pt(key: str, default: str, **kwargs) -> str:
-        return services.plugin_text(plugin_id, key, default, **kwargs)
-
-    context.log(_pt("log.start", "Batch renaming files under '{target_dir}'...", target_dir=target_dir))
+    context.log(tr(services, plugin_id, "log.start", "Batch renaming files under '{target_dir}'...", target_dir=target_dir))
     total = sum(len(files) for _, _, files in os.walk(target_dir))
     if total == 0:
-        raise ValueError(_pt("error.no_files", "No files were found in the selected directory."))
+        raise ValueError(tr(services, plugin_id, "error.no_files", "No files were found in the selected directory."))
 
     compiled = None
     if use_regex:
         try:
             compiled = re.compile(search_rule)
         except re.error as exc:
-            raise ValueError(_pt("error.regex", "Invalid regular expression: {exc}", exc=str(exc))) from exc
+            raise ValueError(tr(services, plugin_id, "error.regex", "Invalid regular expression: {exc}", exc=str(exc))) from exc
 
     renamed_pairs: list[tuple[str, str]] = []
     failures: list[str] = []
@@ -59,7 +56,7 @@ def batch_rename_task(context, services, plugin_id: str, target_dir: str, search
             except Exception as exc:
                 failures.append(f"{file_name} -> {new_name}: {exc}")
 
-    context.log(_pt("log.done", "Renaming complete. Updated {count} files.", count=str(len(renamed_pairs))))
+    context.log(tr(services, plugin_id, "log.done", "Renaming complete. Updated {count} files.", count=str(len(renamed_pairs))))
     return {
         "renamed_pairs": renamed_pairs,
         "failures": failures,
@@ -82,12 +79,10 @@ class BatchRenamerPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._build_ui()
         self.services.i18n.language_changed.connect(self._refresh)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         self.main_layout = QVBoxLayout(self)
@@ -95,12 +90,10 @@ class BatchRenamerPage(QWidget):
         self.main_layout.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         self.main_layout.addWidget(self.title_label)
 
         self.desc_label = QLabel()
         self.desc_label.setWordWrap(True)
-        self.desc_label.setStyleSheet("font-size: 14px; color: #43535c;")
         self.main_layout.addWidget(self.desc_label)
 
         folder_row = QHBoxLayout()
@@ -156,26 +149,29 @@ class BatchRenamerPage(QWidget):
         self._refresh()
 
     def _refresh(self) -> None:
-        self.title_label.setText(self._pt("title", "Batch File Renamer"))
-        self.desc_label.setText(self._pt("description", "Apply a string replacement or regex substitution to filenames across a directory tree."))
-        self.folder_input.setPlaceholderText(self._pt("folder.placeholder", "Select a directory..."))
-        self.browse_button.setText(self._pt("browse", "Browse"))
-        self.find_label.setText(self._pt("find.label", "Find"))
-        self.find_input.setPlaceholderText(self._pt("find.placeholder", "Text or regex pattern"))
-        self.replace_label.setText(self._pt("replace.label", "Replace"))
-        self.replace_input.setPlaceholderText(self._pt("replace.placeholder", "Replacement string"))
-        self.regex_checkbox.setText(self._pt("regex.checkbox", "Use regex"))
-        self.run_button.setText(self._pt("run.button", "Run Renamer"))
-        self.summary_label.setText(self._pt("summary.initial", "Choose a directory and naming rule to begin."))
-        self.output.setPlaceholderText(self._pt("output.placeholder", "Rename preview will appear here."))
+        self.title_label.setText(self.tr("title", "Batch File Renamer"))
+        self.desc_label.setText(self.tr("description", "Apply a string replacement or regex substitution to filenames across a directory tree."))
+        self.folder_input.setPlaceholderText(self.tr("folder.placeholder", "Select a directory..."))
+        self.browse_button.setText(self.tr("browse", "Browse"))
+        self.find_label.setText(self.tr("find.label", "Find"))
+        self.find_input.setPlaceholderText(self.tr("find.placeholder", "Text or regex pattern"))
+        self.replace_label.setText(self.tr("replace.label", "Replace"))
+        self.replace_input.setPlaceholderText(self.tr("replace.placeholder", "Replacement string"))
+        self.regex_checkbox.setText(self.tr("regex.checkbox", "Use regex"))
+        self.run_button.setText(self.tr("run.button", "Run Renamer"))
+        self.summary_label.setText(self.tr("summary.initial", "Choose a directory and naming rule to begin."))
+        self.output.setPlaceholderText(self.tr("output.placeholder", "Rename preview will appear here."))
         self._apply_theme_styles()
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.desc_label.setStyleSheet(muted_text_style(palette))
-        self.summary_card.setStyleSheet(card_style(palette, radius=14))
-        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.desc_label,
+            cards=(self.summary_card,),
+            summary_label=self.summary_label,
+        )
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
@@ -183,7 +179,7 @@ class BatchRenamerPage(QWidget):
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
-            self._pt("dialog.browse", "Select Directory"),
+            self.tr("dialog.browse", "Select Directory"),
             str(self.services.default_output_path()),
         )
         if folder:
@@ -196,14 +192,14 @@ class BatchRenamerPage(QWidget):
         if not target_dir or not search_rule:
             QMessageBox.warning(
                 self, 
-                self._pt("dialog.missing.title", "Missing Input"), 
-                self._pt("dialog.missing.body", "Choose a directory and enter a find rule.")
+                self.tr("dialog.missing.title", "Missing Input"), 
+                self.tr("dialog.missing.body", "Choose a directory and enter a find rule.")
             )
             return
 
         self.run_button.setEnabled(False)
         self.output.setPlainText("")
-        self.summary_label.setText(self._pt("summary.running", "Renaming files..."))
+        self.summary_label.setText(self.tr("summary.running", "Renaming files..."))
 
         self.services.run_task(
             lambda context: batch_rename_task(
@@ -226,15 +222,15 @@ class BatchRenamerPage(QWidget):
         if result["failures"]:
             preview.extend(["", "Failures:"])
             preview.extend(result["failures"][:50])
-        self.output.setPlainText("\n".join(preview) if preview else self._pt("output.none", "No files required renaming."))
+        self.output.setPlainText("\n".join(preview) if preview else self.tr("output.none", "No files required renaming."))
         self.summary_label.setText(
-            self._pt("summary.done", "Renamed {count} files in {target_dir}.", count=str(len(result['renamed_pairs'])), target_dir=result['target_dir'])
+            self.tr("summary.done", "Renamed {count} files in {target_dir}.", count=str(len(result['renamed_pairs'])), target_dir=result['target_dir'])
         )
         status = "SUCCESS" if result["renamed_pairs"] else "WARNING"
         self.services.record_run(
             self.plugin_id,
             status,
-            self._pt("summary.done", "Renamed {count} files in {target_dir}.", count=str(len(result['renamed_pairs'])), target_dir=result['target_dir']),
+            self.tr("summary.done", "Renamed {count} files in {target_dir}.", count=str(len(result['renamed_pairs'])), target_dir=result['target_dir']),
         )
 
     def _handle_error(self, payload: object) -> None:
@@ -242,7 +238,7 @@ class BatchRenamerPage(QWidget):
         self.output.setPlainText(message)
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.failed", "Batch renamer failed."), "ERROR")
+        self.services.log(self.tr("log.failed", "Batch renamer failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)

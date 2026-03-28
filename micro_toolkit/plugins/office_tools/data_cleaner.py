@@ -19,24 +19,8 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.app_utils import generate_output_filename
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
-
-
-def _tr(translate, key: str, default: str, **kwargs) -> str:
-    if callable(translate):
-        try:
-            return translate(key, default, **kwargs)
-        except Exception:
-            pass
-    text = default
-    if kwargs:
-        try:
-            text = text.format(**kwargs)
-        except Exception:
-            pass
-    return text
-
+from micro_toolkit.core.page_style import apply_page_chrome
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, safe_tr
 
 def sanitize_data_task(
     context,
@@ -50,24 +34,24 @@ def sanitize_data_task(
 ):
     import pandas as pd
 
-    context.log(_tr(translate, "log.reading", "Reading {path}...", path=file_path))
+    context.log(safe_tr(translate, "log.reading", "Reading {path}...", path=file_path))
     dataframe = pd.read_excel(file_path)
     start_rows = len(dataframe)
     context.progress(0.2)
 
     if trim:
         dataframe = dataframe.apply(lambda column: column.str.strip() if column.dtype == "object" else column)
-        context.log(_tr(translate, "log.trimmed", "Trimmed whitespace in string cells."))
+        context.log(safe_tr(translate, "log.trimmed", "Trimmed whitespace in string cells."))
     context.progress(0.45)
 
     if drop_empty:
         dataframe = dataframe.dropna(how="all")
-        context.log(_tr(translate, "log.dropped", "Dropped fully empty rows."))
+        context.log(safe_tr(translate, "log.dropped", "Dropped fully empty rows."))
     context.progress(0.65)
 
     if fill_nulls:
         dataframe = dataframe.fillna("NULL_VALUE")
-        context.log(_tr(translate, "log.filled", "Filled null cells with NULL_VALUE."))
+        context.log(safe_tr(translate, "log.filled", "Filled null cells with NULL_VALUE."))
     context.progress(0.8)
 
     source_name = os.path.splitext(os.path.basename(file_path))[0]
@@ -76,7 +60,7 @@ def sanitize_data_task(
     output_path = os.path.join(output_dir, output_name)
     dataframe.to_excel(output_path, index=False)
     context.progress(1.0)
-    context.log(_tr(translate, "log.saved", "Saved cleaned workbook to {path}", path=output_path))
+    context.log(safe_tr(translate, "log.saved", "Saved cleaned workbook to {path}", path=output_path))
 
     return {
         "output_path": output_path,
@@ -101,14 +85,12 @@ class DataCleanerPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._latest_output_path = None
         self._build_ui()
         self._apply_texts()
         self.services.i18n.language_changed.connect(self._apply_texts)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -116,12 +98,10 @@ class DataCleanerPage(QWidget):
         layout.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         layout.addWidget(self.title_label)
 
         self.description_label = QLabel()
         self.description_label.setWordWrap(True)
-        self.description_label.setStyleSheet("font-size: 14px; color: #43535c;")
         layout.addWidget(self.description_label)
 
         file_row = QHBoxLayout()
@@ -177,31 +157,33 @@ class DataCleanerPage(QWidget):
         layout.addWidget(self.output, 1)
 
     def _apply_texts(self) -> None:
-        self.title_label.setText(self._pt("title", "Data Cleaner"))
+        self.title_label.setText(self.tr("title", "Data Cleaner"))
         self.description_label.setText(
-            self._pt(
+            self.tr(
                 "description",
                 "Clean an Excel workbook and write the resulting file to your configured output directory.",
             )
         )
-        self.file_input.setPlaceholderText(self._pt("placeholder.file", "Select an Excel workbook..."))
-        self.browse_button.setText(self._pt("browse", "Browse"))
-        self.trim_checkbox.setText(self._pt("option.trim", "Trim surrounding whitespace"))
-        self.drop_checkbox.setText(self._pt("option.drop", "Drop rows that are completely empty"))
-        self.fill_checkbox.setText(self._pt("option.fill", "Fill remaining null cells with NULL_VALUE"))
-        self.run_button.setText(self._pt("run", "Run Cleaner"))
-        self.open_output_button.setText(self._pt("open_result", "Open Result"))
-        self.summary_label.setText(self._pt("summary.ready", "Choose a workbook to begin cleaning."))
-        self.output.setPlaceholderText(self._pt("summary.placeholder", "Run details will appear here."))
+        self.file_input.setPlaceholderText(self.tr("placeholder.file", "Select an Excel workbook..."))
+        self.browse_button.setText(self.tr("browse", "Browse"))
+        self.trim_checkbox.setText(self.tr("option.trim", "Trim surrounding whitespace"))
+        self.drop_checkbox.setText(self.tr("option.drop", "Drop rows that are completely empty"))
+        self.fill_checkbox.setText(self.tr("option.fill", "Fill remaining null cells with NULL_VALUE"))
+        self.run_button.setText(self.tr("run", "Run Cleaner"))
+        self.open_output_button.setText(self.tr("open_result", "Open Result"))
+        self.summary_label.setText(self.tr("summary.ready", "Choose a workbook to begin cleaning."))
+        self.output.setPlaceholderText(self.tr("summary.placeholder", "Run details will appear here."))
         self._apply_theme_styles()
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.description_label.setStyleSheet(muted_text_style(palette))
-        self.options_card.setStyleSheet(card_style(palette, radius=14))
-        self.summary_card.setStyleSheet(card_style(palette, radius=14))
-        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.description_label,
+            cards=(self.options_card, self.summary_card),
+            summary_label=self.summary_label,
+        )
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
@@ -209,9 +191,9 @@ class DataCleanerPage(QWidget):
     def _browse_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            self._pt("dialog.select_workbook", "Select Workbook"),
+            self.tr("dialog.select_workbook", "Select Workbook"),
             str(self.services.default_output_path()),
-            self._pt("dialog.excel_filter", "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)"),
+            self.tr("dialog.excel_filter", "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)"),
         )
         if file_path:
             self.file_input.setText(file_path)
@@ -221,15 +203,15 @@ class DataCleanerPage(QWidget):
         if not file_path:
             QMessageBox.warning(
                 self,
-                self._pt("error.missing_input.title", "Missing Input"),
-                self._pt("error.missing_file", "Choose a workbook to clean."),
+                self.tr("error.missing_input.title", "Missing Input"),
+                self.tr("error.missing_file", "Choose a workbook to clean."),
             )
             return
 
         self.run_button.setEnabled(False)
         self.open_output_button.setEnabled(False)
         self.output.setPlainText("")
-        self.summary_label.setText(self._pt("summary.running", "Cleaning workbook..."))
+        self.summary_label.setText(self.tr("summary.running", "Cleaning workbook..."))
 
         output_dir = str(self.services.default_output_path())
         self.services.run_task(
@@ -240,7 +222,7 @@ class DataCleanerPage(QWidget):
                 self.drop_checkbox.isChecked(),
                 self.fill_checkbox.isChecked(),
                 output_dir,
-                translate=self._pt,
+                translate=self.tr,
             ),
             on_result=self._handle_result,
             on_error=self._handle_error,
@@ -251,7 +233,7 @@ class DataCleanerPage(QWidget):
         result = dict(payload)
         self._latest_output_path = result["output_path"]
         self.summary_label.setText(
-            self._pt(
+            self.tr(
                 "summary.done",
                 "Cleaned {file_name} and reduced rows from {start_rows} to {end_rows}.",
                 file_name=result["file_name"],
@@ -259,16 +241,16 @@ class DataCleanerPage(QWidget):
                 end_rows=result["end_rows"],
             )
         )
-        self.output.setPlainText(self._pt("output.saved", "Saved cleaned workbook to:\n{path}", path=result["output_path"]))
+        self.output.setPlainText(self.tr("output.saved", "Saved cleaned workbook to:\n{path}", path=result["output_path"]))
         self.open_output_button.setEnabled(True)
-        self.services.record_run(self.plugin_id, "SUCCESS", self._pt("run.success", "Cleaned {file_name}", file_name=result["file_name"]))
+        self.services.record_run(self.plugin_id, "SUCCESS", self.tr("run.success", "Cleaned {file_name}", file_name=result["file_name"]))
 
     def _handle_error(self, payload: object) -> None:
-        message = payload.get("message", self._pt("error.unknown", "Unknown cleaner error")) if isinstance(payload, dict) else str(payload)
+        message = payload.get("message", self.tr("error.unknown", "Unknown cleaner error")) if isinstance(payload, dict) else str(payload)
         self.summary_label.setText(message)
         self.output.setPlainText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.failed", "Data cleaner failed."), "ERROR")
+        self.services.log(self.tr("log.failed", "Data cleaner failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)

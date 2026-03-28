@@ -19,8 +19,8 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.icon_registry import icon_from_name
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome, apply_semantic_class, section_title_style
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr
 
 
 @dataclass(frozen=True)
@@ -213,6 +213,7 @@ class ColorPickerPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._picker_session = ScreenColorPickerSession(self)
         self._picker_session.color_picked.connect(self._handle_color_picked)
         self._picker_session.canceled.connect(self._handle_pick_canceled)
@@ -221,9 +222,6 @@ class ColorPickerPage(QWidget):
         self._apply_styles()
         self.services.i18n.language_changed.connect(self._apply_texts)
         self.services.theme_manager.theme_changed.connect(self._apply_styles)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
@@ -260,13 +258,10 @@ class ColorPickerPage(QWidget):
         self.pick_button.clicked.connect(self._start_pick)
         button_row.addWidget(self.pick_button)
         self.copy_hex_button = QToolButton()
-        self.copy_hex_button.setObjectName("InlineIconButton")
+        apply_semantic_class(self.copy_hex_button, "inline_icon_button_class")
         self.copy_hex_button.setAutoRaise(True)
         self.copy_hex_button.setIconSize(QSize(16, 16))
         self.copy_hex_button.setFixedSize(28, 28)
-        self.copy_hex_button.setStyleSheet(
-            "QToolButton { min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0px; }"
-        )
         self.copy_hex_button.clicked.connect(lambda: self._copy_value(self.hex_value.text()))
         button_row.addWidget(self.copy_hex_button)
         button_row.addStretch(1)
@@ -304,28 +299,34 @@ class ColorPickerPage(QWidget):
         self._set_color(QColor("#D85A8F"))
 
     def _apply_texts(self) -> None:
-        self.title_label.setText(self._pt("title", "Color Picker"))
+        self.title_label.setText(self.tr("title", "Color Picker"))
         self.description_label.setText(
-            self._pt(
+            self.tr(
                 "description",
                 "Pick a color from anywhere on the screen, then inspect its preview, RGB, HEX, and HSL values.",
             )
         )
-        self.status_label.setText(self._pt("status.ready", "Ready to sample a color from the screen."))
-        self.pick_button.setText(self._pt("pick", "Pick from screen"))
-        self.copy_hex_button.setToolTip(self._pt("copy.hex", "Copy HEX"))
+        self.status_label.setText(self.tr("status.ready", "Ready to sample a color from the screen."))
+        self.pick_button.setText(self.tr("pick", "Pick from screen"))
+        self.copy_hex_button.setToolTip(self.tr("copy.hex", "Copy HEX"))
         self.copy_hex_button.setIcon(icon_from_name("copy", self) or QIcon())
-        self.hex_label.setText(self._pt("field.hex", "HEX"))
-        self.rgb_label.setText(self._pt("field.rgb", "RGB"))
-        self.hsl_label.setText(self._pt("field.hsl", "HSL"))
+        self.hex_label.setText(self.tr("field.hex", "HEX"))
+        self.rgb_label.setText(self.tr("field.rgb", "RGB"))
+        self.hsl_label.setText(self.tr("field.hsl", "HSL"))
 
     def _apply_styles(self, *_args) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=800))
-        self.description_label.setStyleSheet(muted_text_style(palette, size=14))
-        self.status_label.setStyleSheet(muted_text_style(palette, size=13))
-        self.hero_card.setStyleSheet(card_style(palette, radius=16))
-        self.values_card.setStyleSheet(card_style(palette, radius=16))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.description_label,
+            cards=(self.hero_card, self.values_card),
+            summary_label=self.status_label,
+            title_size=26,
+            title_weight=800,
+            description_size=14,
+            card_radius=16,
+        )
         self.hex_label.setStyleSheet(section_title_style(palette, size=14, weight=700))
         self.rgb_label.setStyleSheet(section_title_style(palette, size=14, weight=700))
         self.hsl_label.setStyleSheet(section_title_style(palette, size=14, weight=700))
@@ -335,18 +336,18 @@ class ColorPickerPage(QWidget):
         if not self._picker_session.start():
             QMessageBox.warning(
                 self,
-                self._pt("warning.title", "Screen capture unavailable"),
-                self._pt("warning.body", "The screen picker could not start on this session."),
+                self.tr("warning.title", "Screen capture unavailable"),
+                self.tr("warning.body", "The screen picker could not start on this session."),
             )
             return
-        self.status_label.setText(self._pt("status.live", "Pick mode is active. Click any pixel on screen, or press Esc to cancel."))
+        self.status_label.setText(self.tr("status.live", "Pick mode is active. Click any pixel on screen, or press Esc to cancel."))
 
     def _handle_color_picked(self, color: QColor) -> None:
         self._set_color(color)
-        self.status_label.setText(self._pt("status.picked", "Color captured successfully."))
+        self.status_label.setText(self.tr("status.picked", "Color captured successfully."))
 
     def _handle_pick_canceled(self) -> None:
-        self.status_label.setText(self._pt("status.canceled", "Pick mode canceled."))
+        self.status_label.setText(self.tr("status.canceled", "Pick mode canceled."))
 
     def _set_color(self, color: QColor) -> None:
         snapshot = self._snapshot_for(color)

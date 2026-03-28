@@ -20,13 +20,14 @@ from PySide6.QtWidgets import (
 
 from micro_toolkit.core.icon_registry import icon_from_name
 from micro_toolkit.core.page_style import (
+    apply_semantic_class,
     body_text_style,
     card_style,
     muted_text_style,
     section_title_style,
     tinted_card_style,
 )
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr
 from micro_toolkit.core.widgets import width_breakpoint
 
 
@@ -67,6 +68,7 @@ class DashHubPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self.hero_card: QFrame | None = None
         self.hero_stats_grid = None
         self.hero_side_panel: QFrame | None = None
@@ -83,16 +85,15 @@ class DashHubPage(QWidget):
         self.activity_title: QLabel | None = None
         self.activity_stack: QVBoxLayout | None = None
         self.top_tools_chart = QChartView()
+        apply_semantic_class(self.top_tools_chart, "chart_class")
         self.status_chart = QChartView()
+        apply_semantic_class(self.status_chart, "chart_class")
         self._responsive_bucket = ""
         self._workspace_action_buttons: list[QPushButton] = []
         self._build_ui()
         self._refresh()
         self.services.i18n.language_changed.connect(self._refresh)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _plugin_name(self, plugin_id: str, fallback: str) -> str:
         spec = self.services.plugin_manager.get_spec(plugin_id)
@@ -107,6 +108,7 @@ class DashHubPage(QWidget):
 
         self.hero_card = QFrame()
         self.hero_card.setObjectName("DashboardWelcomeCard")
+        apply_semantic_class(self.hero_card, "hero_card_class")
         self.hero_layout = QHBoxLayout(self.hero_card)
         self.hero_layout.setContentsMargins(26, 24, 26, 24)
         self.hero_layout.setSpacing(20)
@@ -171,7 +173,7 @@ class DashHubPage(QWidget):
                 self._open_settings,
             ),
             self._make_dashboard_action_button(
-                self._pt("workspace.action.plugins", "Plugins"),
+                self.tr("workspace.action.plugins", "Plugins"),
                 "inspect",
                 self._open_plugins,
             ),
@@ -221,19 +223,19 @@ class DashHubPage(QWidget):
 
     def _refresh(self) -> None:
         greeting, date_text = self._welcome_texts()
-        self.hero_eyebrow.setText(self._pt("hero.eyebrow", "Welcome back"))
+        self.hero_eyebrow.setText(self.tr("hero.eyebrow", "Welcome back"))
         self.hero_title.setText(greeting)
         self.hero_body.setText(date_text)
-        self.workspace_title.setText(self._pt("workspace.title", "Workspace pulse"))
+        self.workspace_title.setText(self.tr("workspace.title", "Workspace pulse"))
         self.workspace_note.setText(
-            self._pt(
+            self.tr(
                 "workspace.note",
                 "A quick read on backups, shortcuts, workflows, and your output desk so you can decide what needs attention next.",
             )
         )
-        self.activity_title.setText(self._pt("activity.title", "Recent activity"))
-        self.top_tools_title.setText(self._pt("chart.top_tools", "Most used tools"))
-        self.status_title.setText(self._pt("chart.status", "Run outcomes"))
+        self.activity_title.setText(self.tr("activity.title", "Recent activity"))
+        self.top_tools_title.setText(self.tr("chart.top_tools", "Most used tools"))
+        self.status_title.setText(self.tr("chart.status", "Run outcomes"))
         self._render_hero_stats()
         self._render_charts()
         self._render_workspace_pulse()
@@ -260,56 +262,13 @@ class DashHubPage(QWidget):
         if self.hero_side_panel is not None:
             self.hero_side_panel.setStyleSheet(
                 card_style(palette, radius=16)
-                + f"QFrame#DashboardHeroPanel {{ background: {palette.surface_bg}; }}"
+                + f"QFrame#DashboardHeroPanel {{ background: {palette.card_bg}; }}"
             )
-        eyebrow_color, title_color, body_color = self._hero_text_colors()
-        self.hero_eyebrow.setStyleSheet(
-            f"color: {eyebrow_color}; font-size: 12px; font-weight: 700; text-transform: uppercase;"
-        )
-        self.hero_title.setStyleSheet(f"color: {title_color}; font-size: 34px; font-weight: 800;")
-        self.hero_body.setStyleSheet(f"color: {body_color}; font-size: 15px; font-weight: 500;")
+        self.hero_eyebrow.setStyleSheet(self._hero_eyebrow_style())
+        self.hero_title.setStyleSheet(self._hero_title_style())
+        self.hero_body.setStyleSheet(self._hero_body_style())
         if self.workspace_note is not None:
             self.workspace_note.setStyleSheet(muted_text_style(palette, size=13))
-        if self.workspace_card is not None:
-            for button in self.workspace_card.findChildren(QPushButton, "DashboardActionButton"):
-                button.setStyleSheet(
-                    f"""
-                    QPushButton#DashboardActionButton {{
-                        background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
-                            stop:0 {palette.surface_bg},
-                            stop:1 {palette.surface_alt_bg});
-                        color: {palette.text_primary};
-                        border: 1px solid {palette.border};
-                        border-radius: 14px;
-                        padding: 10px 12px;
-                        font-size: 13px;
-                        font-weight: 700;
-                        text-align: left;
-                    }}
-                    QPushButton#DashboardActionButton:hover {{
-                        border-color: {palette.accent};
-                        background: {palette.accent_soft};
-                    }}
-                    """
-                )
-            for button in self.workspace_card.findChildren(QPushButton, "DashboardInlineButton"):
-                button.setStyleSheet(
-                    f"""
-                    QPushButton#DashboardInlineButton {{
-                        background: transparent;
-                        color: {palette.accent};
-                        border: 1px solid {palette.border};
-                        border-radius: 999px;
-                        padding: 6px 10px;
-                        font-size: 12px;
-                        font-weight: 700;
-                    }}
-                    QPushButton#DashboardInlineButton:hover {{
-                        background: {palette.accent_soft};
-                        border-color: {palette.accent};
-                    }}
-                    """
-                )
         for label in (self.workspace_title, self.activity_title, self.top_tools_title, self.status_title):
             label.setStyleSheet(section_title_style(palette, size=20))
 
@@ -317,11 +276,11 @@ class DashHubPage(QWidget):
         now = datetime.now()
         hour = now.hour
         if hour < 12:
-            greeting = self._pt("hero.greeting.morning", "Good morning")
+            greeting = self.tr("hero.greeting.morning", "Good morning")
         elif hour < 18:
-            greeting = self._pt("hero.greeting.afternoon", "Good afternoon")
+            greeting = self.tr("hero.greeting.afternoon", "Good afternoon")
         else:
-            greeting = self._pt("hero.greeting.evening", "Good evening")
+            greeting = self.tr("hero.greeting.evening", "Good evening")
         
         locale = QLocale(self.services.i18n.current_language())
         date_text = self._ensure_western_numerals(locale.toString(now, QLocale.FormatType.LongFormat))
@@ -342,7 +301,7 @@ class DashHubPage(QWidget):
 
         summary = self.services.session_manager.get_summary(days=7)
         top_tools = summary.get("top_tools", [])
-        top_tool_name = self._pt("hero.none", "No activity yet")
+        top_tool_name = self.tr("hero.none", "No activity yet")
         if top_tools:
             top_tool_id = str(top_tools[0].get("tool_id", "")).strip()
             spec = self.services.plugin_manager.get_spec(top_tool_id)
@@ -357,35 +316,26 @@ class DashHubPage(QWidget):
         workflow_count = len(self.services.workflow_manager.list_workflows())
         success_count = int((summary.get("status_counts") or {}).get("success", 0))
         stats = [
-            (self._pt("hero.stat.available", "Available Plugins"), str(available_plugins)),
-            (self._pt("hero.stat.output", "Output desk"), output_name),
-            (self._pt("hero.stat.shortcuts", "Shortcuts"), str(shortcut_count)),
-            (self._pt("hero.stat.workflows", "Workflows"), str(workflow_count)),
-            (self._pt("hero.stat.success", "Successful runs"), str(success_count)),
-            (self._pt("hero.stat.most_used", "Most used tool"), top_tool_name),
+            (self.tr("hero.stat.available", "Available Plugins"), str(available_plugins)),
+            (self.tr("hero.stat.output", "Output desk"), output_name),
+            (self.tr("hero.stat.shortcuts", "Shortcuts"), str(shortcut_count)),
+            (self.tr("hero.stat.workflows", "Workflows"), str(workflow_count)),
+            (self.tr("hero.stat.success", "Successful runs"), str(success_count)),
+            (self.tr("hero.stat.most_used", "Most used tool"), top_tool_name),
         ]
         palette = self.services.theme_manager.current_palette()
-        stat_bg = "rgba(255, 255, 255, 0.10)" if palette.mode == "dark" else "rgba(255, 255, 255, 0.42)"
-        stat_value_color = "#ffffff" if palette.mode == "dark" else palette.text_primary
-        stat_label_color = "rgba(255, 255, 255, 0.76)" if palette.mode == "dark" else "rgba(20, 33, 49, 0.64)"
         columns = {"wide": 3, "medium": 2, "compact": 1}.get(self._responsive_bucket or "wide", 3)
         for index, (label, value) in enumerate(stats):
             card = QFrame()
-            card.setStyleSheet(
-                f"background: {stat_bg};"
-                "border: none;"
-                "border-radius: 12px;"
-            )
+            card.setStyleSheet(self._hero_stat_card_style())
             layout = QVBoxLayout(card)
             layout.setContentsMargins(14, 9, 14, 9)
             layout.setSpacing(4)
             value_label = QLabel(value)
             value_label.setWordWrap(True)
-            value_label.setStyleSheet(
-                f"color: {stat_value_color}; font-size: {'13px' if index == 5 else '15px'}; font-weight: 700;"
-            )
+            value_label.setStyleSheet(self._hero_stat_value_style(compact=index == 5))
             text_label = QLabel(label)
-            text_label.setStyleSheet(f"color: {stat_label_color}; font-size: 11px; font-weight: 600;")
+            text_label.setStyleSheet(self._hero_stat_label_style())
             layout.addWidget(value_label)
             layout.addWidget(text_label)
             self.hero_stats_grid.addWidget(card, index // columns, index % columns)
@@ -444,11 +394,11 @@ class DashHubPage(QWidget):
             values.append(int(row.get("count", 0)))
 
         if not categories:
-            categories = [self._pt("chart.none", "No data yet")]
+            categories = [self.tr("chart.none", "No data yet")]
             values = [0]
 
         series = QBarSeries()
-        bar_set = QBarSet(self._pt("chart.runs", "Runs"))
+        bar_set = QBarSet(self.tr("chart.runs", "Runs"))
         bar_set.setColor(QColor(palette.accent))
         bar_set.append(values)
         series.append(bar_set)
@@ -481,7 +431,7 @@ class DashHubPage(QWidget):
 
         series = QPieSeries()
         if not status_counts:
-            slice_obj = series.append(self._pt("chart.none", "No data yet"), 1)
+            slice_obj = series.append(self.tr("chart.none", "No data yet"), 1)
             slice_obj.setColor(QColor(palette.accent_soft))
         else:
             status_colors = {
@@ -491,7 +441,7 @@ class DashHubPage(QWidget):
                 "failed": QColor(palette.danger),
             }
             for status, count in status_counts.items():
-                status_text = self._pt(f"activity.status.{str(status).lower()}", str(status).title())
+                status_text = self.tr(f"activity.status.{str(status).lower()}", str(status).title())
                 slice_obj = series.append(status_text, int(count))
                 slice_obj.setColor(status_colors.get(str(status).lower(), QColor(palette.accent)))
         chart.addSeries(series)
@@ -506,65 +456,65 @@ class DashHubPage(QWidget):
 
         output_path = self.services.default_output_path()
         output_count = self._safe_dir_item_count(output_path)
-        output_meta = self._pt(
+        output_meta = self.tr(
             "workspace.output.meta",
             "{count} item(s) are currently sitting in the default export folder.",
             count=str(output_count),
         )
         self.workspace_stack.addWidget(
             self._build_workspace_row(
-                self._pt("workspace.output.title", "Output desk"),
+                self.tr("workspace.output.title", "Output desk"),
                 str(output_path),
                 output_meta,
-                self._pt("workspace.output.action", "Command Center"),
+                self.tr("workspace.output.action", "Command Center"),
                 self._open_settings,
             )
         )
 
         last_backup = self.services.backup_manager.last_backup_at()
         backup_due = self.services.backup_manager.backup_due()
-        backup_value = self._pt("workspace.backup.value.due", "Backup due") if backup_due else self._pt("workspace.backup.value.ready", "On schedule")
+        backup_value = self.tr("workspace.backup.value.due", "Backup due") if backup_due else self.tr("workspace.backup.value.ready", "On schedule")
         
         schedule_key = self.services.backup_manager.schedule().lower()
         # Reuse the shared backup schedule translation keys here so the dashboard stays
         # consistent with Command Center's schedule wording.
-        schedule_text = self._pt(f"backup.schedule.{schedule_key}", schedule_key.title())
+        schedule_text = self.tr(f"backup.schedule.{schedule_key}", schedule_key.title())
 
         if last_backup:
-            backup_meta = self._pt(
+            backup_meta = self.tr(
                 "workspace.backup.meta.last",
                 "{schedule} cadence. Last backup: {timestamp}.",
                 schedule=schedule_text,
                 timestamp=self._format_iso_timestamp(last_backup),
             )
         else:
-            backup_meta = self._pt(
+            backup_meta = self.tr(
                 "workspace.backup.meta.none",
                 "{schedule} cadence. No encrypted backup has been created yet.",
                 schedule=schedule_text,
             )
         self.workspace_stack.addWidget(
             self._build_workspace_row(
-                self._pt("workspace.backup.title", "Backups"),
+                self.tr("workspace.backup.title", "Backups"),
                 backup_value,
                 backup_meta,
-                self._pt("workspace.backup.action", "Create backup"),
+                self.tr("workspace.backup.action", "Create backup"),
                 self._create_dashboard_backup,
             )
         )
 
         workflow_count = len(self.services.workflow_manager.list_workflows())
         workflow_meta = (
-            self._pt("workspace.workflows.meta.none", "You do not have any saved workflows yet.")
+            self.tr("workspace.workflows.meta.none", "You do not have any saved workflows yet.")
             if workflow_count == 0
-            else self._pt("workspace.workflows.meta.some", "Automation sequences are ready for repeat jobs and handoffs.")
+            else self.tr("workspace.workflows.meta.some", "Automation sequences are ready for repeat jobs and handoffs.")
         )
         self.workspace_stack.addWidget(
             self._build_workspace_row(
-                self._pt("workspace.workflows.title", "Automation"),
-                self._pt("workspace.workflows.value", "{count} workflow(s)", count=str(workflow_count)),
+                self.tr("workspace.workflows.title", "Automation"),
+                self.tr("workspace.workflows.value", "{count} workflow(s)", count=str(workflow_count)),
                 workflow_meta,
-                self._pt("workspace.workflows.action", "Open workflows"),
+                self.tr("workspace.workflows.action", "Open workflows"),
                 lambda: self._open_plugin("workflow_studio"),
             )
         )
@@ -572,21 +522,21 @@ class DashHubPage(QWidget):
         global_bindings = self.services.shortcut_manager.global_binding_sequences()
         helper_active = self.services.hotkey_helper_manager.is_active()
         shortcut_value = (
-            self._pt("workspace.shortcuts.value.active", "Helper active")
+            self.tr("workspace.shortcuts.value.active", "Helper active")
             if helper_active
-            else self._pt("workspace.shortcuts.value.local", "App focused")
+            else self.tr("workspace.shortcuts.value.local", "App focused")
         )
-        shortcut_meta = self._pt(
+        shortcut_meta = self.tr(
             "workspace.shortcuts.meta",
             "{count} global binding(s) configured. Use Shortcuts to adjust helper access.",
             count=str(len(global_bindings)),
         )
         self.workspace_stack.addWidget(
             self._build_workspace_row(
-                self._pt("workspace.shortcuts.title", "Shortcuts"),
+                self.tr("workspace.shortcuts.title", "Shortcuts"),
                 shortcut_value,
                 shortcut_meta,
-                self._pt("workspace.shortcuts.action", "Command Center"),
+                self.tr("workspace.shortcuts.action", "Command Center"),
                 self._open_settings,
             )
         )
@@ -603,7 +553,7 @@ class DashHubPage(QWidget):
         palette = self.services.theme_manager.current_palette()
         history = self.services.session_manager.get_history(limit=5)
         if not history:
-            empty_text = self._pt("activity.none", "No tool activity has been logged yet.")
+            empty_text = self.tr("activity.none", "No tool activity has been logged yet.")
             empty = QLabel(empty_text)
             empty.setWordWrap(True)
             empty.setStyleSheet(muted_text_style(palette, size=14))
@@ -626,7 +576,7 @@ class DashHubPage(QWidget):
             top.addWidget(label)
             top.addStretch(1)
             
-            status_text = self._pt(f"activity.status.{str(status).lower()}", str(status).title())
+            status_text = self.tr(f"activity.status.{str(status).lower()}", str(status).title())
             status_label = QLabel(status_text)
             status_label.setStyleSheet(self._status_badge_style(str(status)))
             top.addWidget(status_label)
@@ -668,6 +618,7 @@ class DashHubPage(QWidget):
     def _make_dashboard_action_button(self, text: str, icon_name: str, handler) -> QPushButton:
         button = QPushButton(text)
         button.setObjectName("DashboardActionButton")
+        apply_semantic_class(button, "hero_button_class")
         icon = icon_from_name(icon_name, self)
         if icon is not None:
             button.setIcon(icon)
@@ -677,7 +628,7 @@ class DashHubPage(QWidget):
     def _build_workspace_row(self, title: str, value: str, meta: str, action_text: str, action_handler) -> QFrame:
         palette = self.services.theme_manager.current_palette()
         row = QFrame()
-        row.setStyleSheet(tinted_card_style(palette, background=palette.surface_alt_bg, radius=14))
+        row.setStyleSheet(tinted_card_style(palette, background=palette.component_bg, radius=14))
         layout = QHBoxLayout(row)
         layout.setContentsMargins(14, 12, 14, 12)
         layout.setSpacing(12)
@@ -699,6 +650,7 @@ class DashHubPage(QWidget):
 
         action_button = QPushButton(action_text)
         action_button.setObjectName("DashboardInlineButton")
+        apply_semantic_class(action_button, "inline_button_class")
         action_button.clicked.connect(action_handler)
         layout.addWidget(action_button, 0, Qt.AlignmentFlag.AlignTop)
         return row
@@ -735,14 +687,14 @@ class DashHubPage(QWidget):
         except Exception as exc:
             QMessageBox.warning(
                 self,
-                self._pt("workspace.backup.failed.title", "Backup failed"),
+                self.tr("workspace.backup.failed.title", "Backup failed"),
                 str(exc),
             )
             return
         QMessageBox.information(
             self,
-            self._pt("workspace.backup.done.title", "Backup created"),
-            self._pt("workspace.backup.done.body", "Created encrypted backup at:\n{path}", path=str(backup_path)),
+            self.tr("workspace.backup.done.title", "Backup created"),
+            self.tr("workspace.backup.done.body", "Created encrypted backup at:\n{path}", path=str(backup_path)),
         )
         self._refresh()
 
@@ -759,12 +711,12 @@ class DashHubPage(QWidget):
     def _hero_card_style(self) -> str:
         palette = self.services.theme_manager.current_palette()
         if palette.mode == "dark":
-            start = _mix_hex(palette.surface_bg, palette.accent, 0.32)
-            middle = _mix_hex(palette.surface_alt_bg, palette.accent, 0.52)
+            start = _mix_hex(palette.card_bg, palette.accent, 0.32)
+            middle = _mix_hex(palette.component_bg, palette.accent, 0.52)
             end = _mix_hex(palette.accent, "#ffffff", 0.12)
         else:
-            start = _mix_hex(palette.surface_bg, palette.accent_soft, 0.62)
-            middle = _mix_hex(palette.surface_alt_bg, palette.accent, 0.2)
+            start = _mix_hex(palette.card_bg, palette.accent_soft, 0.62)
+            middle = _mix_hex(palette.component_bg, palette.accent, 0.2)
             end = _mix_hex(palette.accent_soft, palette.accent, 0.42)
         gradient = (
             "qlineargradient(x1:0, y1:0, x2:1, y2:1, "
@@ -777,3 +729,31 @@ class DashHubPage(QWidget):
             "border-radius: 16px;"
             "}"
         )
+
+    def _hero_eyebrow_style(self) -> str:
+        eyebrow_color, _title_color, _body_color = self._hero_text_colors()
+        return f"color: {eyebrow_color}; font-size: 12px; font-weight: 700; text-transform: uppercase;"
+
+    def _hero_title_style(self) -> str:
+        _eyebrow_color, title_color, _body_color = self._hero_text_colors()
+        return f"color: {title_color}; font-size: 34px; font-weight: 800;"
+
+    def _hero_body_style(self) -> str:
+        _eyebrow_color, _title_color, body_color = self._hero_text_colors()
+        return f"color: {body_color}; font-size: 15px; font-weight: 500;"
+
+    def _hero_stat_card_style(self) -> str:
+        palette = self.services.theme_manager.current_palette()
+        stat_bg = "rgba(255, 255, 255, 0.10)" if palette.mode == "dark" else "rgba(255, 255, 255, 0.42)"
+        return tinted_card_style(palette, background=stat_bg, radius=12)
+
+    def _hero_stat_value_style(self, *, compact: bool = False) -> str:
+        palette = self.services.theme_manager.current_palette()
+        stat_value_color = "#ffffff" if palette.mode == "dark" else palette.text_primary
+        size = 13 if compact else 15
+        return f"color: {stat_value_color}; font-size: {size}px; font-weight: 700;"
+
+    def _hero_stat_label_style(self) -> str:
+        palette = self.services.theme_manager.current_palette()
+        stat_label_color = "rgba(255, 255, 255, 0.76)" if palette.mode == "dark" else "rgba(20, 33, 49, 0.64)"
+        return f"color: {stat_label_color}; font-size: 11px; font-weight: 600;"

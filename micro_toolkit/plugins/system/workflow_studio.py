@@ -24,8 +24,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from micro_toolkit.core.plugin_api import QtPlugin
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr
+from micro_toolkit.core.page_style import apply_page_chrome, apply_semantic_class, section_title_style
 from micro_toolkit.core.widgets import ScrollSafeComboBox, width_breakpoint
 
 
@@ -60,6 +60,7 @@ class WorkflowStudioPage(QWidget):
         super().__init__()
         self.services = services
         self.i18n = services.i18n
+        self.tr = bind_tr(services, self.plugin_id)
         self._responsive_bucket = ""
         self._build_ui()
         self._reload_workflows()
@@ -67,16 +68,12 @@ class WorkflowStudioPage(QWidget):
         self.i18n.language_changed.connect(self._apply_texts)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
-
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 28, 28, 28)
         outer.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700;")
         outer.addWidget(self.title_label)
 
         self.description_label = QLabel()
@@ -87,6 +84,7 @@ class WorkflowStudioPage(QWidget):
         outer.addWidget(self.splitter, 1)
 
         self.left_panel = QWidget()
+        apply_semantic_class(self.left_panel, "transparent_class")
         left_layout = QVBoxLayout(self.left_panel)
         left_layout.setContentsMargins(0, 0, 0, 0)
         left_layout.setSpacing(10)
@@ -114,6 +112,7 @@ class WorkflowStudioPage(QWidget):
         self.splitter.addWidget(self.left_panel)
 
         self.right_panel = QWidget()
+        apply_semantic_class(self.right_panel, "transparent_class")
         right_layout = QVBoxLayout(self.right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
         right_layout.setSpacing(14)
@@ -127,6 +126,7 @@ class WorkflowStudioPage(QWidget):
         info_layout.addWidget(self.info_label)
 
         self.meta_host = QWidget()
+        apply_semantic_class(self.meta_host, "transparent_class")
         self.meta_grid = QGridLayout(self.meta_host)
         self.meta_grid.setContentsMargins(0, 0, 0, 0)
         self.meta_grid.setHorizontalSpacing(10)
@@ -204,6 +204,7 @@ class WorkflowStudioPage(QWidget):
         self.command_output.setReadOnly(True)
         self.command_output.setMaximumBlockCount(500)
         self.command_output.setMinimumHeight(120)
+        apply_semantic_class(self.command_output, "console_class")
         reference_layout.addWidget(self.command_output, 1)
         commands_layout.addWidget(self.reference_card, 1)
 
@@ -266,7 +267,7 @@ class WorkflowStudioPage(QWidget):
     def _save_workflow(self) -> None:
         name = self.name_input.text().strip()
         if not name:
-            QMessageBox.warning(self, self._pt("warning.title", "Missing name"), self._pt("warning.name", "Enter a workflow name before saving or running it."))
+            QMessageBox.warning(self, self.tr("warning.title", "Missing name"), self.tr("warning.name", "Enter a workflow name before saving or running it."))
             return
         payload = {
             "name": name,
@@ -275,7 +276,7 @@ class WorkflowStudioPage(QWidget):
         }
         self.services.workflow_manager.save_workflow(name, payload)
         self._reload_workflows()
-        QMessageBox.information(self, self._pt("saved.title", "Workflow saved"), self._pt("saved.body", "The workflow was saved successfully."))
+        QMessageBox.information(self, self.tr("saved.title", "Workflow saved"), self.tr("saved.body", "The workflow was saved successfully."))
 
     def _delete_current_workflow(self) -> None:
         item = self.workflow_list.currentItem()
@@ -288,7 +289,7 @@ class WorkflowStudioPage(QWidget):
     def _run_workflow(self) -> None:
         name = self.name_input.text().strip()
         if not name:
-            QMessageBox.warning(self, self._pt("warning.title", "Missing name"), self._pt("warning.name", "Enter a workflow name before saving or running it."))
+            QMessageBox.warning(self, self.tr("warning.title", "Missing name"), self.tr("warning.name", "Enter a workflow name before saving or running it."))
             return
         payload = {
             "name": name,
@@ -311,7 +312,7 @@ class WorkflowStudioPage(QWidget):
         except Exception as exc:
             messages.append(str(exc))
             self.command_output.setPlainText("\n".join(messages))
-            QMessageBox.critical(self, self._pt("run_failed.title", "Workflow failed"), "\n".join(messages))
+            QMessageBox.critical(self, self.tr("run_failed.title", "Workflow failed"), "\n".join(messages))
             return
 
         messages.append(json.dumps(self.services.serialize_result(result), indent=2, ensure_ascii=False))
@@ -346,59 +347,53 @@ class WorkflowStudioPage(QWidget):
 
     def _apply_texts(self) -> None:
         self._apply_theme_styles()
-        self.title_label.setText(self._pt("title", "Workflows"))
+        self.title_label.setText(self.tr("title", "Workflows"))
         self.description_label.setText(
-            self._pt(
+            self.tr(
                 "description",
                 "Save reusable automation sequences built from registered app commands. Workflows can open tools, switch language, change theme, and trigger shell actions.",
             )
         )
-        self.list_label.setText(self._pt("list", "Saved workflows"))
-        self.reload_button.setText(self._pt("reload", "Reload"))
-        self.delete_button.setText(self._pt("delete", "Delete"))
-        self.info_label.setText(self._pt("details", "Workflow details"))
-        self.name_label.setText(self._pt("name", "Name"))
-        self.description_meta_label.setText(self._pt("meta.description", "Description"))
-        self.steps_label.setText(self._pt("steps", "Steps"))
+        self.list_label.setText(self.tr("list", "Saved workflows"))
+        self.reload_button.setText(self.tr("reload", "Reload"))
+        self.delete_button.setText(self.tr("delete", "Delete"))
+        self.info_label.setText(self.tr("details", "Workflow details"))
+        self.name_label.setText(self.tr("name", "Name"))
+        self.description_meta_label.setText(self.tr("meta.description", "Description"))
+        self.steps_label.setText(self.tr("steps", "Steps"))
         self.step_table.setHorizontalHeaderLabels(
             [
-                self._pt("command", "Command"),
-                self._pt("arguments", "Arguments JSON"),
+                self.tr("command", "Command"),
+                self.tr("arguments", "Arguments JSON"),
             ]
         )
-        self.add_step_button.setText(self._pt("add_step", "Add step"))
-        self.remove_step_button.setText(self._pt("remove_step", "Remove step"))
-        self.save_button.setText(self._pt("save", "Save workflow"))
-        self.run_button.setText(self._pt("run", "Run workflow"))
-        self.reference_label.setText(self._pt("reference", "Available commands"))
-        self.run_output_label.setText(self._pt("run_output", "Run output"))
+        self.add_step_button.setText(self.tr("add_step", "Add step"))
+        self.remove_step_button.setText(self.tr("remove_step", "Remove step"))
+        self.save_button.setText(self.tr("save", "Save workflow"))
+        self.run_button.setText(self.tr("run", "Run workflow"))
+        self.reference_label.setText(self.tr("reference", "Available commands"))
+        self.run_output_label.setText(self.tr("run_output", "Run output"))
         self.command_reference_table.setHorizontalHeaderLabels(
             [
-                self._pt("reference.command_id", "Command ID"),
-                self._pt("reference.title", "Title"),
-                self._pt("reference.description", "Description"),
+                self.tr("reference.command_id", "Command ID"),
+                self.tr("reference.title", "Title"),
+                self.tr("reference.description", "Description"),
             ]
         )
         self._refresh_command_reference()
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        for frame in (self.list_card, self.info_card, self.steps_card, self.commands_card):
-            frame.setStyleSheet(card_style(palette))
-        self.reference_card.setStyleSheet("background: transparent; border: none;")
-        self.left_panel.setStyleSheet("background: transparent;")
-        self.right_panel.setStyleSheet("background: transparent;")
-        self.splitter.setStyleSheet("background: transparent;")
-        self.command_output.setStyleSheet(
-            f"background: {'#11161d' if palette.mode != 'dark' else '#0d131b'};"
-            f"color: {'#d9f7df' if palette.mode != 'dark' else '#d7e3ee'};"
-            f"border: 1px solid {palette.border};"
-            "border-radius: 12px;"
-            "padding: 10px 12px;"
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.description_label,
+            cards=(self.list_card, self.info_card, self.steps_card, self.commands_card),
+            title_size=26,
+            title_weight=700,
         )
+        apply_semantic_class(self.reference_card, "transparent_class")
         self.command_output.setFont(QFontDatabase.systemFont(QFontDatabase.SystemFont.FixedFont))
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.description_label.setStyleSheet(muted_text_style(palette))
         self.list_label.setStyleSheet(section_title_style(palette))
         self.info_label.setStyleSheet(section_title_style(palette))
         self.name_label.setStyleSheet(section_title_style(palette, size=14))

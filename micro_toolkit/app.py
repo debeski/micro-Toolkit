@@ -2,10 +2,11 @@ from __future__ import annotations
 
 from collections import defaultdict
 from contextlib import contextmanager
+import math
 import os
 from pathlib import Path
 
-from PySide6.QtCore import QByteArray, QEvent, QProcess, QSize, Qt, QTimer
+from PySide6.QtCore import QByteArray, QEvent, QProcess, QRectF, QSize, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QFontMetrics, QIcon, QKeyEvent, QKeySequence, QPainter, QPen
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -37,6 +38,7 @@ from PySide6.QtWidgets import (
 
 from micro_toolkit.core.confirm_dialog import confirm_action, confirm_action_with_option
 from micro_toolkit.core.icon_registry import icon_from_name
+from micro_toolkit.core.page_style import apply_semantic_class
 from micro_toolkit.core.plugin_manager import PluginSpec
 from micro_toolkit.core.services import AppServices
 from micro_toolkit.core.shell_registry import (
@@ -135,22 +137,84 @@ class SpinnerIndicator(QWidget):
         self.hide()
 
     def _advance(self) -> None:
-        self._angle = (self._angle + 30) % 360
+        self._angle = (self._angle + 28) % 360
         self.update()
+
+    @staticmethod
+    def _blend_color(start: QColor, end: QColor, amount: float) -> QColor:
+        amount = max(0.0, min(1.0, float(amount)))
+        inverse = 1.0 - amount
+        return QColor(
+            int((start.red() * inverse) + (end.red() * amount)),
+            int((start.green() * inverse) + (end.green() * amount)),
+            int((start.blue() * inverse) + (end.blue() * amount)),
+            int((start.alpha() * inverse) + (end.alpha() * amount)),
+        )
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
         palette = self.palette()
-        base = QColor(palette.color(palette.ColorRole.Mid))
         accent = QColor(palette.color(palette.ColorRole.Highlight))
-        base.setAlpha(90)
-        accent.setAlpha(255)
-        rect = self.rect().adjusted(self._inset, self._inset, -self._inset, -self._inset)
-        painter.setPen(QPen(base, self._thickness))
-        painter.drawArc(rect, 0, 360 * 16)
-        painter.setPen(QPen(accent, self._thickness))
-        painter.drawArc(rect, int((-self._angle + 90) * 16), int(-110 * 16))
+        mid = QColor(palette.color(palette.ColorRole.Mid))
+        text = QColor(palette.color(palette.ColorRole.WindowText))
+
+        track = self._blend_color(mid, accent, 0.14)
+        track.setAlpha(78)
+        glow = QColor(accent)
+        glow.setAlpha(46)
+
+        bounds = self.rect().adjusted(self._inset, self._inset, -self._inset, -self._inset)
+        orbit_radius = max(3.0, (min(bounds.width(), bounds.height()) / 2.0) - 1.0)
+        center = bounds.center()
+        orbit_rect = QRectF(
+            center.x() - orbit_radius,
+            center.y() - orbit_radius,
+            orbit_radius * 2.0,
+            orbit_radius * 2.0,
+        )
+
+        track_pen = QPen(track, max(1.0, self._thickness * 0.26))
+        track_pen.setCapStyle(Qt.PenCapStyle.RoundCap)
+        painter.setPen(track_pen)
+        painter.setBrush(Qt.BrushStyle.NoBrush)
+        painter.drawEllipse(orbit_rect)
+
+        painter.setPen(Qt.PenStyle.NoPen)
+        segment_count = 8
+        segment_spread = 22.0
+        head_radius = max(1.7, self._thickness * 0.46)
+
+        for index in range(segment_count - 1, -1, -1):
+            strength = 1.0 - (index / max(1, segment_count - 1))
+            angle = math.radians((self._angle - 90.0) - (index * segment_spread))
+            dot_radius = max(0.9, head_radius * (0.38 + (strength * 0.82)))
+            dot_color = self._blend_color(text, accent, 0.2 + (strength * 0.8))
+            dot_color.setAlpha(int(36 + (strength ** 1.8) * 219))
+            dot_center_x = center.x() + math.cos(angle) * orbit_radius
+            dot_center_y = center.y() + math.sin(angle) * orbit_radius
+
+            if index == 0:
+                painter.setBrush(glow)
+                glow_radius = dot_radius + max(1.2, self._thickness * 0.22)
+                painter.drawEllipse(
+                    QRectF(
+                        dot_center_x - glow_radius,
+                        dot_center_y - glow_radius,
+                        glow_radius * 2.0,
+                        glow_radius * 2.0,
+                    )
+                )
+
+            painter.setBrush(dot_color)
+            painter.drawEllipse(
+                QRectF(
+                    dot_center_x - dot_radius,
+                    dot_center_y - dot_radius,
+                    dot_radius * 2.0,
+                    dot_radius * 2.0,
+                )
+            )
 
 
 class StatusElidedLabel(QLabel):
@@ -181,72 +245,6 @@ class StatusElidedLabel(QLabel):
             self.setToolTip(self._full_text)
         else:
             self.setToolTip("")
-
-
-class LoadingOverlay(QWidget):
-    def __init__(self, parent: QWidget):
-        super().__init__(parent)
-        self.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-        self.setAttribute(Qt.WidgetAttribute.WA_NoSystemBackground, True)
-        self.setAutoFillBackground(False)
-        self.setFocusPolicy(Qt.FocusPolicy.StrongFocus)
-        self.hide()
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.spinner = SpinnerIndicator(self)
-        layout.addWidget(self.spinner, 0, Qt.AlignmentFlag.AlignCenter)
-
-    def show_message(self, message: str) -> None:
-        self.setGeometry(self.parentWidget().rect())
-        self.raise_()
-        self._set_keyboard_grabbed(True)
-        self.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
-        self.spinner.start()
-        self.show()
-
-    def hide_overlay(self) -> None:
-        self.spinner.stop()
-        self._set_keyboard_grabbed(False)
-        self.hide()
-
-    def set_blur_targets(self, _targets: list[QWidget]) -> None:
-        # Kept for compatibility with existing calls. The overlay is now self-contained.
-        return
-
-    def _set_keyboard_grabbed(self, enabled: bool) -> None:
-        app = QApplication.instance()
-        if app is None or app.platformName() == "offscreen":
-            return
-        try:
-            if enabled:
-                self.grabKeyboard()
-            else:
-                self.releaseKeyboard()
-        except Exception:
-            pass
-
-    def mousePressEvent(self, event) -> None:
-        event.accept()
-
-    def mouseMoveEvent(self, event) -> None:
-        event.accept()
-
-    def mouseReleaseEvent(self, event) -> None:
-        event.accept()
-
-    def mouseDoubleClickEvent(self, event) -> None:
-        event.accept()
-
-    def wheelEvent(self, event) -> None:
-        event.accept()
-
-    def keyPressEvent(self, event) -> None:
-        event.accept()
-
-    def keyReleaseEvent(self, event) -> None:
-        event.accept()
 
 
 class TerminalOutputView(QPlainTextEdit):
@@ -316,12 +314,20 @@ class EmbeddedTerminalWidget(QWidget):
         self.output = TerminalOutputView(self)
         self.output.setObjectName("TerminalOutputView")
         self.output.setReadOnly(True)
+        self.output.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.output.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        self.output.setAttribute(Qt.WidgetAttribute.WA_Hover, False)
+        self.output.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, False)
         self.output.setMaximumBlockCount(2000)
+        apply_semantic_class(self.output, "console_class")
         layout.addWidget(self.output, 1)
 
         self.input = QLineEdit()
         self.input.setObjectName("TerminalInput")
         self.input.setPlaceholderText("Enter command and press Return")
+        apply_semantic_class(self.input, "console_class")
         self.input.returnPressed.connect(self._submit_command)
         layout.addWidget(self.input, 0)
 
@@ -407,7 +413,11 @@ class MicroToolkitWindow(QMainWindow):
         self._busy_depth = 0
         self._visual_busy_depth = 0
         self._busy_cursor_active = False
-        self._visual_status_restore = ""
+        self._busy_status_restore = ""
+        self._plugin_open_request_id = 0
+        self._pending_plugin_open_id: str | None = None
+        self._plugin_open_loading_active = False
+        self._pending_command_center_section: str | None = None
         self._dock_state_timer = QTimer(self)
         self._dock_state_timer.setSingleShot(True)
         self._dock_state_timer.setInterval(220)
@@ -489,8 +499,6 @@ class MicroToolkitWindow(QMainWindow):
         utility_layout.setContentsMargins(12, utility_vertical_margin, 12, utility_vertical_margin)
         utility_layout.setSpacing(8)
 
-        search_input_height = max(26, utility_actions_height - 4)
-
         search_host = QWidget()
         search_host.setObjectName("UtilitySearchHost")
         search_host_layout = QHBoxLayout(search_host)
@@ -502,7 +510,7 @@ class MicroToolkitWindow(QMainWindow):
         self.search_input.setClearButtonEnabled(True)
         self.search_input.setMinimumWidth(340)
         self.search_input.setMaximumWidth(520)
-        self.search_input.setFixedHeight(search_input_height)
+        self.search_input.setFixedHeight(utility_actions_height)
         search_host.setFixedHeight(utility_actions_height)
         search_host.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         search_host_layout.addWidget(self.search_input, 0, Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
@@ -522,8 +530,8 @@ class MicroToolkitWindow(QMainWindow):
             ("clip_snip", QStyle.StandardPixmap.SP_FileDialogContentsView, "Clip Snip"),
             ("workflow_studio", QStyle.StandardPixmap.SP_BrowserReload, "Workflows"),
             ("plugin_manager", QStyle.StandardPixmap.SP_FileIcon, "Plugins"),
-            ("about_info", QStyle.StandardPixmap.SP_FileDialogInfoView, "About Info"),
             ("command_center", QStyle.StandardPixmap.SP_FileDialogDetailedView, "Command Center"),
+            ("about_info", QStyle.StandardPixmap.SP_FileDialogInfoView, "About Info"),
             (INSPECTOR_PLUGIN_ID, QStyle.StandardPixmap.SP_FileDialogDetailedView, "Dev Lab"),
         ):
             button = self._make_tool_button(
@@ -534,10 +542,6 @@ class MicroToolkitWindow(QMainWindow):
             )
             button.setIconSize(QSize(18, 18))
             button.setFixedSize(utility_button_size, utility_button_size)
-            button.setStyleSheet(
-                f"QToolButton {{ min-width: {utility_button_size}px; max-width: {utility_button_size}px; "
-                f"min-height: {utility_button_size}px; max-height: {utility_button_size}px; padding: 0px; }}"
-            )
             button.setObjectName("SystemToolbarButton")
             self.system_toolbar_buttons[plugin_id] = button
             self.top_system_tools.addWidget(button)
@@ -616,9 +620,18 @@ class MicroToolkitWindow(QMainWindow):
         self.log_output = QPlainTextEdit()
         self.log_output.setObjectName("ShellLogOutput")
         self.log_output.setReadOnly(True)
+        self.log_output.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.log_output.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse | Qt.TextInteractionFlag.TextSelectableByKeyboard
+        )
+        self.log_output.setAttribute(Qt.WidgetAttribute.WA_Hover, False)
+        self.log_output.viewport().setAttribute(Qt.WidgetAttribute.WA_Hover, False)
         self.log_output.setMaximumBlockCount(800)
         self.log_output.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
+        apply_semantic_class(self.log_output, "log_class")
         self.terminal_output = EmbeddedTerminalWidget()
+        self.services.theme_manager.sync_semantic_surfaces(self.log_output)
+        self.services.theme_manager.sync_semantic_surfaces(self.terminal_output)
         self.dock_stack = QStackedWidget()
         self.dock_stack.addWidget(self.log_output)
         self.dock_stack.addWidget(self.terminal_output)
@@ -658,8 +671,6 @@ class MicroToolkitWindow(QMainWindow):
         self.console_button.setFixedSize(28, 20)
         status.addPermanentWidget(self.console_button)
         self.setStatusBar(status)
-        self.loading_overlay = LoadingOverlay(self)
-        self.loading_overlay.set_blur_targets([central, status, self.log_dock])
 
         placeholder = self._build_placeholder_page()
         self.page_stack.addWidget(placeholder)
@@ -675,15 +686,20 @@ class MicroToolkitWindow(QMainWindow):
         return button
 
     def begin_loading(self, message: str = "Loading...") -> None:
+        if (self._busy_depth + self._visual_busy_depth) == 0:
+            self._busy_status_restore = getattr(self.status_label, "_full_text", self.status_label.text())
         self._busy_depth += 1
         self._sync_busy_cursor()
-        self.loading_overlay.show_message(message)
+        self.top_refresh_spinner.start()
+        self.status_label.setText(message)
         QApplication.processEvents()
 
     def end_loading(self) -> None:
         self._busy_depth = max(0, self._busy_depth - 1)
-        if self._busy_depth == 0:
-            self.loading_overlay.hide_overlay()
+        if (self._busy_depth + self._visual_busy_depth) == 0:
+            self.top_refresh_spinner.stop()
+            if self._busy_status_restore:
+                self.status_label.setText(self._busy_status_restore)
         self._sync_busy_cursor()
 
     @contextmanager
@@ -695,8 +711,8 @@ class MicroToolkitWindow(QMainWindow):
             self.end_loading()
 
     def begin_visual_refresh(self, message: str = "Refreshing...") -> None:
-        if self._visual_busy_depth == 0:
-            self._visual_status_restore = getattr(self.status_label, "_full_text", self.status_label.text())
+        if (self._busy_depth + self._visual_busy_depth) == 0:
+            self._busy_status_restore = getattr(self.status_label, "_full_text", self.status_label.text())
         self._visual_busy_depth += 1
         self._sync_busy_cursor()
         self.top_refresh_spinner.start()
@@ -705,10 +721,10 @@ class MicroToolkitWindow(QMainWindow):
 
     def end_visual_refresh(self) -> None:
         self._visual_busy_depth = max(0, self._visual_busy_depth - 1)
-        if self._visual_busy_depth == 0:
+        if (self._busy_depth + self._visual_busy_depth) == 0:
             self.top_refresh_spinner.stop()
-            if self._visual_status_restore:
-                self.status_label.setText(self._visual_status_restore)
+            if self._busy_status_restore:
+                self.status_label.setText(self._busy_status_restore)
         self._sync_busy_cursor()
 
     def _sync_busy_cursor(self) -> None:
@@ -716,12 +732,17 @@ class MicroToolkitWindow(QMainWindow):
         if app is None:
             return
         should_be_busy = (self._busy_depth + self._visual_busy_depth) > 0
+        if hasattr(self, "top_refresh_spinner") and self.top_refresh_spinner.isVisible():
+            should_be_busy = True
         if should_be_busy and not self._busy_cursor_active:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             self._busy_cursor_active = True
         elif not should_be_busy and self._busy_cursor_active:
             QApplication.restoreOverrideCursor()
             self._busy_cursor_active = False
+        theme_manager = getattr(self.services, "theme_manager", None)
+        if theme_manager is not None and hasattr(theme_manager, "refresh_interactive_cursors"):
+            theme_manager.refresh_interactive_cursors(app)
 
     def show_task_progress(self, progress_value: int | None = None) -> None:
         if progress_value is None:
@@ -1038,22 +1059,27 @@ class MicroToolkitWindow(QMainWindow):
         self.page_indices[spec.plugin_id] = page_index
         self._stale_theme_pages.discard(spec.plugin_id)
 
-    def open_plugin(self, plugin_id: str) -> None:
-        spec = self.plugin_by_id.get(plugin_id)
-        if spec is None:
-            return
+    def _cancel_pending_plugin_open(self) -> None:
+        self._plugin_open_request_id += 1
+        self._pending_plugin_open_id = None
+        if self._plugin_open_loading_active:
+            self.end_loading()
+            self._plugin_open_loading_active = False
 
-        try:
-            with self.loading_context(self.services.i18n.tr("shell.loading", "Loading...")):
-                if plugin_id in self._stale_theme_pages:
-                    self._rebuild_plugin_page(spec)
-                else:
-                    self._ensure_plugin_page(spec)
-        except Exception as exc:
-            self._handle_plugin_open_error(spec, exc)
-            return
-
+    def _activate_plugin_page(self, spec: PluginSpec) -> None:
+        plugin_id = spec.plugin_id
         self.current_plugin_id = plugin_id
+        if plugin_id == "command_center":
+            settings_page = self._plugin_content_widget("command_center")
+            pending_section = self._pending_command_center_section
+            if settings_page is not None and pending_section:
+                if pending_section == "plugins":
+                    open_tab = getattr(settings_page, "open_plugins_tab", None)
+                else:
+                    open_tab = getattr(settings_page, "open_general_tab", None)
+                if callable(open_tab):
+                    open_tab()
+            self._pending_command_center_section = None
         self._sync_system_toolbar_selection(plugin_id)
         if plugin_id in SYSTEM_TOOLBAR_PLUGIN_IDS:
             self.sidebar_tree.blockSignals(True)
@@ -1067,6 +1093,49 @@ class MicroToolkitWindow(QMainWindow):
         self.services.logger.set_status(f"Loaded {self.services.plugin_display_name(spec)}")
         if spec.source_type == "custom":
             self.services.plugin_state_manager.clear_failures(plugin_id)
+
+    def _complete_plugin_open(self, request_id: int, plugin_id: str) -> None:
+        if request_id != self._plugin_open_request_id or plugin_id != self._pending_plugin_open_id:
+            return
+        spec = self.plugin_by_id.get(plugin_id)
+        try:
+            if spec is None:
+                return
+            if plugin_id in self._stale_theme_pages:
+                self._rebuild_plugin_page(spec)
+            else:
+                self._ensure_plugin_page(spec)
+        except Exception as exc:
+            if spec is not None:
+                self._handle_plugin_open_error(spec, exc)
+            return
+        finally:
+            if request_id == self._plugin_open_request_id:
+                self._pending_plugin_open_id = None
+                if self._plugin_open_loading_active:
+                    self.end_loading()
+                    self._plugin_open_loading_active = False
+
+        if spec is not None and request_id == self._plugin_open_request_id:
+            self._activate_plugin_page(spec)
+
+    def open_plugin(self, plugin_id: str) -> None:
+        spec = self.plugin_by_id.get(plugin_id)
+        if spec is None:
+            return
+        needs_build = plugin_id in self._stale_theme_pages or plugin_id not in self.page_indices
+        if not needs_build:
+            self._cancel_pending_plugin_open()
+            self._activate_plugin_page(spec)
+            return
+
+        self._plugin_open_request_id += 1
+        request_id = self._plugin_open_request_id
+        self._pending_plugin_open_id = plugin_id
+        if not self._plugin_open_loading_active:
+            self.begin_loading(self.services.i18n.tr("shell.loading", "Loading..."))
+            self._plugin_open_loading_active = True
+        QTimer.singleShot(90, lambda rid=request_id, pid=plugin_id: self._complete_plugin_open(rid, pid))
 
     def _sync_header(self, spec: PluginSpec) -> None:
         language = self.services.i18n.current_language()
@@ -1138,6 +1207,7 @@ class MicroToolkitWindow(QMainWindow):
                 themed = themed.replace(source, target)
             if themed != current:
                 widget.setStyleSheet(themed)
+        self.services.theme_manager.sync_semantic_surfaces(root_widget)
 
     def _configure_tables(self, root_widget: QWidget) -> None:
         for table in [root_widget, *root_widget.findChildren(QWidget)]:
@@ -1152,7 +1222,7 @@ class MicroToolkitWindow(QMainWindow):
         return {
             "color: palette(mid);": f"color: {palette.text_muted};",
             "border: 1px solid palette(mid);": f"border: 1px solid {palette.border};",
-            "background: palette(base);": f"background: {palette.input_bg};",
+            "background: palette(base);": f"background: {palette.element_bg};",
             "#10232c": palette.text_primary,
             "#8a1f11": palette.danger,
             "#6a2218": palette.danger,
@@ -1161,9 +1231,9 @@ class MicroToolkitWindow(QMainWindow):
             "#34444d": palette.text_muted,
             "#6a382f": palette.text_muted,
             "#7c5c57": palette.text_muted,
-            "#fffdf9": palette.surface_alt_bg,
-            "#fffaf3": palette.surface_bg,
-            "#fff7f2": palette.surface_alt_bg,
+            "#fffdf9": palette.card_bg,
+            "#fffaf3": palette.card_bg,
+            "#fff7f2": palette.card_bg,
             "#eadfce": palette.border,
             "#e0d5c6": palette.border,
             "#efd3c9": palette.border,
@@ -1183,8 +1253,8 @@ class MicroToolkitWindow(QMainWindow):
             ("clip_snip", tr("shell.clipboard", "Clip Snip")),
             ("workflow_studio", tr("shell.workflows", "Workflows")),
             ("plugin_manager", tr("shell.plugins", "Plugins")),
-            ("about_info", tr("shell.about", "About Info")),
             ("command_center", tr("shell.settings", "Command Center")),
+            ("about_info", tr("shell.about", "About Info")),
             (INSPECTOR_PLUGIN_ID, tr("shell.inspector", "Dev Lab")),
         ):
             button = self.system_toolbar_buttons.get(plugin_id)
@@ -1236,21 +1306,25 @@ class MicroToolkitWindow(QMainWindow):
         self.search_input.selectAll()
 
     def open_plugin_manager(self) -> None:
+        self._pending_command_center_section = "plugins"
         self.open_plugin("command_center")
         settings_page = self._plugin_content_widget("command_center")
         if settings_page is not None:
             open_plugins_tab = getattr(settings_page, "open_plugins_tab", None)
             if callable(open_plugins_tab):
                 open_plugins_tab()
+                self._pending_command_center_section = None
         self._sync_system_toolbar_selection("command_center")
 
     def open_command_center(self) -> None:
+        self._pending_command_center_section = "general"
         self.open_plugin("command_center")
         settings_page = self._plugin_content_widget("command_center")
         if settings_page is not None:
             open_general_tab = getattr(settings_page, "open_general_tab", None)
             if callable(open_general_tab):
                 open_general_tab()
+                self._pending_command_center_section = None
         self._sync_system_toolbar_selection("command_center")
 
     def open_settings_center(self) -> None:
@@ -1475,8 +1549,6 @@ class MicroToolkitWindow(QMainWindow):
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)
-        if hasattr(self, "loading_overlay"):
-            self.loading_overlay.setGeometry(self.rect())
         self._schedule_save_activity_dock_state()
 
     def eventFilter(self, watched: object, event: QEvent) -> bool:

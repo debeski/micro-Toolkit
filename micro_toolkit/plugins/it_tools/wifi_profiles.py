@@ -29,8 +29,8 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.icon_registry import icon_from_name
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome, apply_semantic_class, section_title_style
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, safe_tr
 
 
 @dataclass(frozen=True)
@@ -41,22 +41,6 @@ class WifiProfile:
     device: str
     status: str
     notes: str = ""
-
-
-def _tr(translate, key: str, default: str, **kwargs) -> str:
-    if callable(translate):
-        try:
-            return translate(key, default, **kwargs)
-        except Exception:
-            pass
-    text = default
-    if kwargs:
-        try:
-            text = text.format(**kwargs)
-        except Exception:
-            pass
-    return text
-
 
 def _run_command(args: list[str], *, timeout: float = 12.0, translate=None) -> tuple[bool, str, str]:
     try:
@@ -70,9 +54,9 @@ def _run_command(args: list[str], *, timeout: float = 12.0, translate=None) -> t
             check=False,
         )
     except FileNotFoundError:
-        return False, "", _tr(translate, "error.command_missing", "Command not found: {command}", command=args[0])
+        return False, "", safe_tr(translate, "error.command_missing", "Command not found: {command}", command=args[0])
     except subprocess.TimeoutExpired:
-        return False, "", _tr(translate, "error.command_timeout", "Command timed out: {command}", command=" ".join(args))
+        return False, "", safe_tr(translate, "error.command_timeout", "Command timed out: {command}", command=" ".join(args))
     except Exception as exc:
         return False, "", str(exc)
     return completed.returncode == 0, completed.stdout.strip(), completed.stderr.strip()
@@ -126,8 +110,8 @@ def _maskless_password_hint(password: str, security: str, *, translate=None) -> 
         return ""
     lowered = str(security or "").lower()
     if not lowered or lowered in {"open", "none", "--"}:
-        return _tr(translate, "hint.open", "Open network")
-    return _tr(translate, "hint.unavailable", "Password unavailable from current backend")
+        return safe_tr(translate, "hint.open", "Open network")
+    return safe_tr(translate, "hint.unavailable", "Password unavailable from current backend")
 
 
 def _linux_connection_value(profile_name: str, field: str) -> str:
@@ -148,10 +132,10 @@ def _linux_wifi_payload(context, *, translate=None) -> dict[str, object]:
             "backend": "nmcli",
             "current": None,
             "profiles": [],
-            "warnings": [_tr(translate, "error.nmcli", "NetworkManager CLI (`nmcli`) is not available on this system.")],
+            "warnings": [safe_tr(translate, "error.nmcli", "NetworkManager CLI (`nmcli`) is not available on this system.")],
         }
 
-    context.log(_tr(translate, "log.linux", "Reading active Linux Wi-Fi connections with nmcli."))
+    context.log(safe_tr(translate, "log.linux", "Reading active Linux Wi-Fi connections with nmcli."))
     active_connections: dict[str, dict[str, str]] = {}
     ok, output, error = _run_command(
         ["nmcli", "-t", "-e", "yes", "-f", "NAME,TYPE,DEVICE", "connection", "show", "--active"],
@@ -181,7 +165,7 @@ def _linux_wifi_payload(context, *, translate=None) -> dict[str, object]:
             wifi_scan_by_ssid[ssid.strip()] = {
                 "signal": signal.strip(),
                 "rate": rate.strip(),
-                "security": security.strip() or _tr(translate, "security.open", "Open"),
+                "security": security.strip() or safe_tr(translate, "security.open", "Open"),
                 "device": device.strip(),
                 "active": active.strip().lower() == "yes",
             }
@@ -193,7 +177,7 @@ def _linux_wifi_payload(context, *, translate=None) -> dict[str, object]:
         translate=translate,
     )
     if not ok:
-        warnings.append(error or _tr(translate, "error.saved_profiles", "Unable to read saved Wi-Fi profiles via nmcli."))
+        warnings.append(error or safe_tr(translate, "error.saved_profiles", "Unable to read saved Wi-Fi profiles via nmcli."))
         return {
             "platform": "linux",
             "backend": "nmcli",
@@ -214,7 +198,7 @@ def _linux_wifi_payload(context, *, translate=None) -> dict[str, object]:
         security = _first_text(
             scan_details.get("security", ""),
             key_mgmt.replace("-", " ").upper(),
-            _tr(translate, "security.open", "Open"),
+            safe_tr(translate, "security.open", "Open"),
         )
         password = _first_text(
             _linux_connection_value(profile_name, "802-11-wireless-security.psk"),
@@ -250,8 +234,8 @@ def _linux_wifi_payload(context, *, translate=None) -> dict[str, object]:
                     "device": details.get("device", "--") or "--",
                     "signal": details.get("signal", "--") or "--",
                     "rate": details.get("rate", "--") or "--",
-                    "security": details.get("security", _tr(translate, "security.open", "Open"))
-                    or _tr(translate, "security.open", "Open"),
+                    "security": details.get("security", safe_tr(translate, "security.open", "Open"))
+                    or safe_tr(translate, "security.open", "Open"),
                     "password": "--",
                 }
                 break
@@ -274,15 +258,15 @@ def _xml_find_text(root: ET.Element, tag_name: str) -> str:
 
 def _windows_wifi_payload(context, *, translate=None) -> dict[str, object]:
     warnings: list[str] = [
-        _tr(translate, "warning.windows", "Windows current-network fields are best-effort and may vary with localized netsh output.")
+        safe_tr(translate, "warning.windows", "Windows current-network fields are best-effort and may vary with localized netsh output.")
     ]
     profiles: list[WifiProfile] = []
     current_network: dict[str, str] | None = None
 
     if shutil.which("netsh") is None:
-        raise RuntimeError(_tr(translate, "error.netsh", "`netsh` is not available on this Windows system."))
+        raise RuntimeError(safe_tr(translate, "error.netsh", "`netsh` is not available on this Windows system."))
 
-    context.log(_tr(translate, "log.windows", "Exporting Windows Wi-Fi profiles with clear keys."))
+    context.log(safe_tr(translate, "log.windows", "Exporting Windows Wi-Fi profiles with clear keys."))
     with tempfile.TemporaryDirectory(prefix="micro_toolkit_wifi_") as temp_dir:
         ok, _, error = _run_command(
             ["netsh", "wlan", "export", "profile", "key=clear", f"folder={temp_dir}"],
@@ -297,14 +281,14 @@ def _windows_wifi_payload(context, *, translate=None) -> dict[str, object]:
             except Exception:
                 continue
             ssid = _first_text(_xml_find_text(root, "name"), xml_path.stem)
-            security = _first_text(_xml_find_text(root, "authentication"), _tr(translate, "security.saved_profile", "Saved profile"))
+            security = _first_text(_xml_find_text(root, "authentication"), safe_tr(translate, "security.saved_profile", "Saved profile"))
             password = _xml_find_text(root, "keyMaterial")
             profiles.append(
                 WifiProfile(
                     ssid=ssid,
                     password=password,
                     security=security,
-                    device=_tr(translate, "device.wifi", "Wi-Fi"),
+                    device=safe_tr(translate, "device.wifi", "Wi-Fi"),
                     status="saved",
                     notes=_maskless_password_hint(password, security, translate=translate),
                 )
@@ -320,7 +304,7 @@ def _windows_wifi_payload(context, *, translate=None) -> dict[str, object]:
         if ssid:
             current_network = {
                 "ssid": ssid,
-                "device": _first_text(capture("Name"), _tr(translate, "device.wifi", "Wi-Fi")),
+                "device": _first_text(capture("Name"), safe_tr(translate, "device.wifi", "Wi-Fi")),
                 "signal": capture("Signal") or "--",
                 "rate": _first_text(capture("Receive rate \\(Mbps\\)"), capture("Transmit rate \\(Mbps\\)"), "--"),
                 "security": _first_text(capture("Authentication"), "--"),
@@ -372,9 +356,9 @@ def _macos_wifi_payload(context, *, translate=None) -> dict[str, object]:
     warnings: list[str] = []
     device = _macos_wifi_device(translate=translate)
     if not device:
-        raise RuntimeError(_tr(translate, "error.macos_device", "Unable to determine the active Wi-Fi interface on macOS."))
+        raise RuntimeError(safe_tr(translate, "error.macos_device", "Unable to determine the active Wi-Fi interface on macOS."))
 
-    context.log(_tr(translate, "log.macos", "Reading macOS Wi-Fi profiles for {device}.", device=device))
+    context.log(safe_tr(translate, "log.macos", "Reading macOS Wi-Fi profiles for {device}.", device=device))
     profiles: list[WifiProfile] = []
     current_network: dict[str, str] | None = None
 
@@ -384,7 +368,7 @@ def _macos_wifi_payload(context, *, translate=None) -> dict[str, object]:
         translate=translate,
     )
     if not ok:
-        raise RuntimeError(error or _tr(translate, "error.macos_list", "Unable to list preferred wireless networks."))
+        raise RuntimeError(error or safe_tr(translate, "error.macos_list", "Unable to list preferred wireless networks."))
     ssids = [line.strip() for line in output.splitlines()[1:] if line.strip()]
 
     ok, output, error = _run_command(["networksetup", "-getairportnetwork", device], timeout=8.0, translate=translate)
@@ -407,12 +391,12 @@ def _macos_wifi_payload(context, *, translate=None) -> dict[str, object]:
             WifiProfile(
                 ssid=ssid,
                 password=password if ok else "",
-                security=_tr(translate, "security.saved_profile", "Saved profile"),
+                security=safe_tr(translate, "security.saved_profile", "Saved profile"),
                 device=device,
                 status="connected" if ssid == current_ssid else "saved",
                 notes=_maskless_password_hint(
                     password if ok else "",
-                    _tr(translate, "security.saved_profile", "Saved profile"),
+                    safe_tr(translate, "security.saved_profile", "Saved profile"),
                     translate=translate,
                 ),
             )
@@ -449,7 +433,7 @@ def collect_wifi_payload(context, *, translate=None) -> dict[str, object]:
         payload = _macos_wifi_payload(context, translate=translate)
     else:
         raise RuntimeError(
-            _tr(
+            safe_tr(
                 translate,
                 "error.unsupported_platform",
                 "Unsupported platform for Wi-Fi inspection: {platform}",
@@ -512,6 +496,7 @@ class WifiProfilesPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._payload: dict[str, object] = {"profiles": [], "warnings": [], "current": None}
         self._current_password = ""
         self._current_password_revealed = False
@@ -522,9 +507,6 @@ class WifiProfilesPage(QWidget):
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
         self.services.i18n.language_changed.connect(self._handle_language_change)
         self._refresh()
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -584,27 +566,26 @@ class WifiProfilesPage(QWidget):
         field_labels = [("ssid", "label.ssid"), ("device", "label.device"), ("signal", "label.signal"), ("rate", "label.rate"), ("security", "label.security"), ("password", "label.password")]
         for row, (field_key, field_title) in enumerate(field_labels):
             label = QLabel()
+            apply_semantic_class(label, "field_title_class")
             label.setProperty("_wifi_label_key", field_title)
             self.current_grid.addWidget(label, row, 0)
             self.current_fields[f"{field_key}_title"] = label
             if field_key == "password":
                 host = QWidget()
-                host.setStyleSheet("background: transparent;")
+                apply_semantic_class(host, "transparent_class")
                 host_layout = QHBoxLayout(host)
                 host_layout.setContentsMargins(0, 0, 0, 0)
                 host_layout.setSpacing(6)
                 value = QLabel("--")
+                apply_semantic_class(value, "field_value_class")
                 value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
                 value.setWordWrap(True)
                 host_layout.addWidget(value, 1)
                 toggle = QToolButton()
-                toggle.setObjectName("InlineIconButton")
+                apply_semantic_class(toggle, "inline_icon_button_class")
                 toggle.setAutoRaise(True)
                 toggle.setIconSize(QSize(16, 16))
                 toggle.setFixedSize(28, 28)
-                toggle.setStyleSheet(
-                    "QToolButton { min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0px; }"
-                )
                 toggle.clicked.connect(self._toggle_current_password_visibility)
                 host_layout.addWidget(toggle, 0, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.current_grid.addWidget(host, row, 1)
@@ -613,6 +594,7 @@ class WifiProfilesPage(QWidget):
                 self.current_fields[field_key] = value
             else:
                 value = QLabel("--")
+                apply_semantic_class(value, "field_value_class")
                 value.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
                 value.setWordWrap(True)
                 self.current_grid.addWidget(value, row, 1)
@@ -652,20 +634,17 @@ class WifiProfilesPage(QWidget):
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        for card in (self.hero_card, self.current_card, self.warnings_card, self.table_card):
-            card.setStyleSheet(card_style(palette))
-
-        self.title_label.setStyleSheet(page_title_style(palette))
-        self.subtitle_label.setStyleSheet(muted_text_style(palette, size=14))
-        self.status_label.setStyleSheet(muted_text_style(palette, size=13, weight=600))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.subtitle_label,
+            cards=(self.hero_card, self.current_card, self.warnings_card, self.table_card),
+            description_size=14,
+        )
+        apply_semantic_class(self.status_label, "status_text_class")
         self.current_heading.setStyleSheet(section_title_style(palette))
         self.warnings_heading.setStyleSheet(section_title_style(palette))
         self.table_heading.setStyleSheet(section_title_style(palette))
-        for key, label in self.current_fields.items():
-            if key.endswith("_title"):
-                label.setStyleSheet(f"font-size: 13px; font-weight: 700; color: {palette.text_primary};")
-            else:
-                label.setStyleSheet(f"font-size: 14px; font-weight: 500; color: {palette.text_muted};")
         if self.current_password_toggle is not None:
             self.current_password_toggle.setIcon(self._password_toggle_icon(self._current_password_revealed))
             self.current_password_toggle.setEnabled(bool(self._current_password))
@@ -681,9 +660,9 @@ class WifiProfilesPage(QWidget):
     def _refresh(self) -> None:
         self.refresh_button.setEnabled(False)
         self.copy_current_button.setEnabled(False)
-        self.status_label.setText(self._pt("status_ready", "Ready to inspect Wi-Fi profiles."))
+        self.status_label.setText(self.tr("status_ready", "Ready to inspect Wi-Fi profiles."))
         self.services.run_task(
-            lambda context: collect_wifi_payload(context, translate=self._pt),
+            lambda context: collect_wifi_payload(context, translate=self.tr),
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._handle_finished,
@@ -695,17 +674,17 @@ class WifiProfilesPage(QWidget):
         backend = str(self._payload.get("backend") or sys.platform)
         count = len(profiles) if isinstance(profiles, list) else 0
         if count:
-            self.status_label.setText(self._pt("status_loaded", "Loaded {count} Wi-Fi profile(s) using {backend}.", count=count, backend=backend))
+            self.status_label.setText(self.tr("status_loaded", "Loaded {count} Wi-Fi profile(s) using {backend}.", count=count, backend=backend))
             self.services.record_run(self.plugin_id, "SUCCESS", f"Loaded {count} Wi-Fi profile(s) via {backend}")
         else:
-            self.status_label.setText(self._pt("status_empty", "No Wi-Fi profiles were returned by the current backend."))
+            self.status_label.setText(self.tr("status_empty", "No Wi-Fi profiles were returned by the current backend."))
             self.services.record_run(self.plugin_id, "WARNING", f"No Wi-Fi profiles returned via {backend}")
         self._render_current_network()
         self._render_warnings()
         self._render_profiles()
 
     def _handle_error(self, payload: object) -> None:
-        message = payload.get("message", self._pt("error.inspect", "Wi-Fi inspection failed.")) if isinstance(payload, dict) else str(payload)
+        message = payload.get("message", self.tr("error.inspect", "Wi-Fi inspection failed.")) if isinstance(payload, dict) else str(payload)
         self.status_label.setText(message)
         self.warnings_output.setPlainText(message)
         self.table.setRowCount(0)
@@ -730,7 +709,7 @@ class WifiProfilesPage(QWidget):
             if self.current_password_toggle is not None:
                 self.current_password_toggle.setEnabled(False)
                 self.current_password_toggle.setIcon(self._password_toggle_icon(False))
-            self.current_fields["ssid"].setText(self._pt("unsupported", "No current Wi-Fi network is connected."))
+            self.current_fields["ssid"].setText(self.tr("unsupported", "No current Wi-Fi network is connected."))
             return
 
         self._current_password = str(current.get("password") or "").strip()
@@ -744,7 +723,7 @@ class WifiProfilesPage(QWidget):
                 value = "--"
             if field == "password":
                 self.current_fields[field].setText(self._display_password(value, revealed=self._current_password_revealed))
-                self.current_fields[field].setToolTip(value if value not in {"", "--"} else self._pt("tooltip.no_pass", "No stored password available"))
+                self.current_fields[field].setToolTip(value if value not in {"", "--"} else self.tr("tooltip.no_pass", "No stored password available"))
             else:
                 self.current_fields[field].setText(value)
 
@@ -753,7 +732,7 @@ class WifiProfilesPage(QWidget):
         if not isinstance(warnings, list):
             warnings = []
         text = "\n".join(f"- {str(item)}" for item in warnings if str(item).strip())
-        self.warnings_output.setPlainText(text or self._pt("warnings.none", "No backend warnings."))
+        self.warnings_output.setPlainText(text or self.tr("warnings.none", "No backend warnings."))
 
     def _render_profiles(self) -> None:
         payload_profiles = self._payload.get("profiles") or []
@@ -774,7 +753,7 @@ class WifiProfilesPage(QWidget):
             for column, value in enumerate(values):
                 cell = QTableWidgetItem(value)
                 if column == 1:
-                    cell.setToolTip(password or self._pt("tooltip.no_pass", "No stored password available"))
+                    cell.setToolTip(password or self.tr("tooltip.no_pass", "No stored password available"))
                 self.table.setItem(row_index, column, cell)
         self._rebuild_action_cells()
         self.table.resizeRowsToContents()
@@ -785,45 +764,39 @@ class WifiProfilesPage(QWidget):
         for row_index, row in enumerate(profiles):
             item = row if isinstance(row, dict) else {}
             password = str(item.get("password") or "")
-            ssid = str(item.get("ssid") or self._pt("device.wifi", "Wi-Fi"))
+            ssid = str(item.get("ssid") or self.tr("device.wifi", "Wi-Fi"))
             action_host = QWidget()
-            action_host.setStyleSheet("background: transparent;")
+            apply_semantic_class(action_host, "transparent_class")
             action_layout = QHBoxLayout(action_host)
             action_layout.setContentsMargins(6, 0, 6, 0)
             action_layout.setSpacing(4)
             action_layout.addStretch(1)
 
             reveal_button = QToolButton()
-            reveal_button.setObjectName("InlineIconButton")
+            apply_semantic_class(reveal_button, "inline_icon_button_class")
             reveal_button.setAutoRaise(True)
             reveal_button.setIconSize(QSize(16, 16))
             reveal_button.setFixedSize(28, 28)
-            reveal_button.setStyleSheet(
-                "QToolButton { min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0px; }"
-            )
             reveal_button.setIcon(self._password_toggle_icon(row_index in self._revealed_profile_rows))
             reveal_button.setToolTip(
-                self._pt("tooltip.reveal", "Reveal password")
+                self.tr("tooltip.reveal", "Reveal password")
                 if row_index not in self._revealed_profile_rows
-                else self._pt("tooltip.hide", "Hide password")
+                else self.tr("tooltip.hide", "Hide password")
             )
             reveal_button.setEnabled(bool(password))
             reveal_button.clicked.connect(lambda _checked=False, idx=row_index: self._toggle_profile_password_visibility(idx))
             action_layout.addWidget(reveal_button)
 
             copy_button = QToolButton()
-            copy_button.setObjectName("InlineIconButton")
+            apply_semantic_class(copy_button, "inline_icon_button_class")
             copy_button.setAutoRaise(True)
             copy_button.setIconSize(QSize(16, 16))
             copy_button.setFixedSize(28, 28)
-            copy_button.setStyleSheet(
-                "QToolButton { min-width: 28px; max-width: 28px; min-height: 28px; max-height: 28px; padding: 0px; }"
-            )
             copy_button.setIcon(
                 icon_from_name("clipboard", self)
                 or self.style().standardIcon(self.style().StandardPixmap.SP_FileDialogContentsView)
             )
-            copy_button.setToolTip(self._pt("tooltip.copy", "Copy password"))
+            copy_button.setToolTip(self.tr("tooltip.copy", "Copy password"))
             copy_button.setEnabled(bool(password))
             copy_button.clicked.connect(lambda _checked=False, text=password, name=ssid: self._copy_password(text, name))
             action_layout.addWidget(copy_button)
@@ -834,19 +807,19 @@ class WifiProfilesPage(QWidget):
         if not password:
             QMessageBox.information(
                 self,
-                self._pt("error.no_password.title", "No Password"),
-                self._pt("error.no_password.body", "No stored password is available for this profile."),
+                self.tr("error.no_password.title", "No Password"),
+                self.tr("error.no_password.body", "No stored password is available for this profile."),
             )
             return
         QGuiApplication.clipboard().setText(password)
-        self.services.log(self._pt("copy_ok", "Password copied for {ssid}.", ssid=ssid))
+        self.services.log(self.tr("copy_ok", "Password copied for {ssid}.", ssid=ssid))
 
     def _copy_current_password(self) -> None:
         current = self._payload.get("current")
         ssid = (
-            str(current.get("ssid") or self._pt("current_network", "current network"))
+            str(current.get("ssid") or self.tr("current_network", "current network"))
             if isinstance(current, dict)
-            else self._pt("current_network", "current network")
+            else self.tr("current_network", "current network")
         )
         self._copy_password(self._current_password, ssid)
 
@@ -871,9 +844,9 @@ class WifiProfilesPage(QWidget):
         if self.current_password_toggle is not None:
             self.current_password_toggle.setIcon(self._password_toggle_icon(self._current_password_revealed))
             self.current_password_toggle.setToolTip(
-                self._pt("tooltip.hide", "Hide password")
+                self.tr("tooltip.hide", "Hide password")
                 if self._current_password_revealed
-                else self._pt("tooltip.reveal", "Reveal password")
+                else self.tr("tooltip.reveal", "Reveal password")
             )
         current = self._payload.get("current")
         value = str(current.get("password") or "--") if isinstance(current, dict) else "--"
@@ -894,40 +867,40 @@ class WifiProfilesPage(QWidget):
     def _status_text(self, status: str) -> str:
         lowered = str(status or "").strip().lower()
         if lowered == "connected":
-            return self._pt("status.connected", "Connected")
+            return self.tr("status.connected", "Connected")
         if lowered == "saved":
-            return self._pt("status.saved", "Saved")
+            return self.tr("status.saved", "Saved")
         return status or "--"
 
     def _apply_texts(self) -> None:
-        self.title_label.setText(self._pt("title", "Wi-Fi Profiles"))
+        self.title_label.setText(self.tr("title", "Wi-Fi Profiles"))
         self.subtitle_label.setText(
-            self._pt(
+            self.tr(
                 "subtitle",
                 "Review the current Wi-Fi connection, saved network profiles, and passwords that your platform backend can expose.",
             )
         )
-        self.refresh_button.setText(self._pt("refresh", "Refresh profiles"))
-        self.copy_current_button.setText(self._pt("copy_current", "Copy current password"))
-        self.current_heading.setText(self._pt("current_heading", "Current network"))
-        self.warnings_heading.setText(self._pt("warnings_heading", "Backend notes"))
-        self.table_heading.setText(self._pt("saved_heading", "Saved Wi-Fi profiles"))
-        self.status_label.setText(self._pt("status_ready", "Ready to inspect Wi-Fi profiles."))
-        self.warnings_output.setPlaceholderText(self._pt("warnings.none", "No backend warnings."))
+        self.refresh_button.setText(self.tr("refresh", "Refresh profiles"))
+        self.copy_current_button.setText(self.tr("copy_current", "Copy current password"))
+        self.current_heading.setText(self.tr("current_heading", "Current network"))
+        self.warnings_heading.setText(self.tr("warnings_heading", "Backend notes"))
+        self.table_heading.setText(self.tr("saved_heading", "Saved Wi-Fi profiles"))
+        self.status_label.setText(self.tr("status_ready", "Ready to inspect Wi-Fi profiles."))
+        self.warnings_output.setPlaceholderText(self.tr("warnings.none", "No backend warnings."))
         self.table.setHorizontalHeaderLabels(
             [
-                self._pt("label.ssid", "SSID"),
-                self._pt("label.password", "Password"),
-                self._pt("label.security", "Security"),
-                self._pt("label.device", "Device"),
-                self._pt("label.status", "Status"),
-                self._pt("label.notes", "Notes"),
-                self._pt("label.actions", "Actions"),
+                self.tr("label.ssid", "SSID"),
+                self.tr("label.password", "Password"),
+                self.tr("label.security", "Security"),
+                self.tr("label.device", "Device"),
+                self.tr("label.status", "Status"),
+                self.tr("label.notes", "Notes"),
+                self.tr("label.actions", "Actions"),
             ]
         )
         for key, label in self.current_fields.items():
             if key.endswith("_title"):
                 label_key = str(label.property("_wifi_label_key") or "")
-                label.setText(self._pt(label_key, label.text() or label_key))
+                label.setText(self.tr(label_key, label.text() or label_key))
         if self.current_password_toggle is not None:
-            self.current_password_toggle.setToolTip(self._pt("tooltip.reveal", "Reveal password"))
+            self.current_password_toggle.setToolTip(self.tr("tooltip.reveal", "Reveal password"))

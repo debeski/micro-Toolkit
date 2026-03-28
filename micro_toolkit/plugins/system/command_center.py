@@ -26,6 +26,7 @@ from PySide6.QtWidgets import (
     QMenu,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QSlider,
     QTableWidget,
     QTableWidgetItem,
@@ -40,8 +41,8 @@ from PySide6.QtWidgets import (
 
 from micro_toolkit.core.confirm_dialog import confirm_action
 from micro_toolkit.core.icon_registry import icon_choices, icon_from_name
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome, apply_semantic_class, muted_text_style, section_title_style
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr
 from micro_toolkit.core.app_config import DEFAULT_CONFIG
 from micro_toolkit.core.shell_registry import DASHBOARD_PLUGIN_ID, INSPECTOR_PLUGIN_ID
 from micro_toolkit.core.widgets import ScrollSafeComboBox, ScrollSafeSlider, adaptive_columns, adaptive_grid_columns, visible_parent_width, width_breakpoint
@@ -87,6 +88,7 @@ class ThemeSwatchButton(QToolButton):
     def __init__(self, label: str, color_hex: str, parent: QWidget | None = None):
         super().__init__(parent)
         self._color_hex = color_hex
+        apply_semantic_class(self, "swatch_button_class")
         self.setCheckable(True)
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonIconOnly)
         self.setIconSize(QSize(22, 22))
@@ -109,6 +111,7 @@ class ThemeSwatchButton(QToolButton):
 class ChoiceChipButton(QToolButton):
     def __init__(self, label: str, parent: QWidget | None = None):
         super().__init__(parent)
+        apply_semantic_class(self, "chip_button_class")
         self.setText(label)
         self.setCheckable(True)
         self.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextOnly)
@@ -313,7 +316,7 @@ class IconPickerButton(QToolButton):
     def _refresh(self) -> None:
         icon = icon_from_name(self._selected_icon, self._page) if self._selected_icon else None
         self.setIcon(icon or icon_from_name("plugin", self._page) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
-        self.setToolTip(self._page._pt("plugins.row.icon_picker", "Choose an icon"))
+        self.setToolTip(self._page.tr("plugins.row.icon_picker", "Choose an icon"))
 
     def _open_picker(self) -> None:
         dialog = IconPickerDialog(self, self._page._icon_options(), self._selected_icon)
@@ -358,6 +361,7 @@ class CommandCenterPage(QWidget):
         self.i18n = services.i18n
         self.shortcut_action_ids: list[str] = []
         self.plugin_row_map: dict[str, int] = {}
+        self.tr = bind_tr(services, self.plugin_id)
         self._building_plugin_table = False
         self._editing_plugin_id: str | None = None
         self._editing_snapshot: dict[str, str] = {}
@@ -391,9 +395,6 @@ class CommandCenterPage(QWidget):
         self.services.plugin_visuals_changed.connect(lambda _plugin_id: self._render_quick_access_settings())
         self.services.plugin_visuals_changed.connect(lambda _plugin_id: self._populate_startup_page_combo())
 
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
-
     def sizeHint(self):
         return self._page_size_hint(minimum=False)
 
@@ -424,12 +425,10 @@ class CommandCenterPage(QWidget):
         outer.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700;")
         outer.addWidget(self.title_label)
 
         self.description_label = QLabel()
-        self.description_label.setWordWrap(True)
-        self.description_label.setStyleSheet("font-size: 14px;")
+        self._configure_note_label(self.description_label)
         outer.addWidget(self.description_label)
 
         self.tabs = CurrentTabSizeWidget()
@@ -450,6 +449,18 @@ class CommandCenterPage(QWidget):
         self._build_shortcuts_tab()
         self._build_plugins_tab()
 
+    @staticmethod
+    def _configure_section_title_label(label: QLabel) -> None:
+        label.setWordWrap(False)
+        label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter)
+        label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+
+    @staticmethod
+    def _configure_note_label(label: QLabel) -> None:
+        label.setWordWrap(True)
+        label.setAlignment(Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignTop)
+        label.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Maximum)
+
     def _build_general_tab(self) -> None:
         layout = QVBoxLayout(self.general_tab)
         layout.setContentsMargins(20, 20, 20, 10)
@@ -460,9 +471,10 @@ class CommandCenterPage(QWidget):
         output_layout.setContentsMargins(18, 16, 18, 16)
         output_layout.setSpacing(10)
         self.output_title = QLabel()
+        self._configure_section_title_label(self.output_title)
         output_layout.addWidget(self.output_title)
         self.general_note = QLabel()
-        self.general_note.setWordWrap(True)
+        self._configure_note_label(self.general_note)
         output_layout.addWidget(self.general_note)
         self.output_label = QLabel()
         self.startup_page_label = QLabel()
@@ -490,9 +502,10 @@ class CommandCenterPage(QWidget):
         appearance_layout.setContentsMargins(18, 16, 18, 16)
         appearance_layout.setSpacing(10)
         self.appearance_title = QLabel()
+        self._configure_section_title_label(self.appearance_title)
         appearance_layout.addWidget(self.appearance_title)
         self.appearance_note = QLabel()
-        self.appearance_note.setWordWrap(True)
+        self._configure_note_label(self.appearance_note)
         appearance_layout.addWidget(self.appearance_note)
         form = QFormLayout()
         form.setContentsMargins(0, 4, 0, 0)
@@ -518,6 +531,7 @@ class CommandCenterPage(QWidget):
             theme_picker_layout.addWidget(button)
         self.dark_mode_checkbox = ChoiceChipButton("", theme_picker_host)
         self.dark_mode_checkbox.setObjectName("DarkModeToggle")
+        apply_semantic_class(self.dark_mode_checkbox, "toggle_class")
         self.dark_mode_checkbox.toggled.connect(self._handle_live_theme_change)
         theme_picker_layout.addWidget(self.dark_mode_checkbox)
         theme_picker_layout.addStretch(1)
@@ -590,9 +604,10 @@ class CommandCenterPage(QWidget):
         card_layout.setContentsMargins(18, 16, 18, 16)
         card_layout.setSpacing(8)
         self.behavior_title = QLabel()
+        self._configure_section_title_label(self.behavior_title)
         card_layout.addWidget(self.behavior_title)
         self.behavior_note = QLabel()
-        self.behavior_note.setWordWrap(True)
+        self._configure_note_label(self.behavior_note)
         card_layout.addWidget(self.behavior_note)
 
         self.minimize_to_tray_checkbox = QCheckBox()
@@ -617,7 +632,7 @@ class CommandCenterPage(QWidget):
         self.developer_mode_checkbox.toggled.connect(self._handle_developer_mode_toggled)
         card_layout.addWidget(self.developer_mode_checkbox)
         self.autostart_status_label = QLabel()
-        self.autostart_status_label.setWordWrap(True)
+        self._configure_note_label(self.autostart_status_label)
         card_layout.addWidget(self.autostart_status_label)
         self.general_tools_row.addWidget(self.automation_card, 1)
 
@@ -626,9 +641,10 @@ class CommandCenterPage(QWidget):
         backup_layout.setContentsMargins(18, 16, 18, 16)
         backup_layout.setSpacing(8)
         self.backup_title = QLabel()
+        self._configure_section_title_label(self.backup_title)
         backup_layout.addWidget(self.backup_title)
         self.backup_note = QLabel()
-        self.backup_note.setWordWrap(True)
+        self._configure_note_label(self.backup_note)
         backup_layout.addWidget(self.backup_note)
         self.backup_schedule_label = QLabel()
         self.backup_schedule_combo = QComboBox()
@@ -643,7 +659,7 @@ class CommandCenterPage(QWidget):
         backup_schedule_row.addWidget(self.backup_schedule_combo, 1)
         backup_layout.addLayout(backup_schedule_row)
         self.backup_status_label = QLabel()
-        self.backup_status_label.setWordWrap(True)
+        self._configure_note_label(self.backup_status_label)
         backup_layout.addWidget(self.backup_status_label)
         backup_actions = QHBoxLayout()
         backup_actions.setContentsMargins(0, 0, 0, 0)
@@ -659,6 +675,7 @@ class CommandCenterPage(QWidget):
         self.general_tools_row.addWidget(self.backup_card, 1)
 
         layout.addLayout(self.general_tools_row)
+        layout.addStretch(1)
 
         self.general_actions = QHBoxLayout()
         self.general_actions.addStretch(1)
@@ -673,7 +690,7 @@ class CommandCenterPage(QWidget):
         layout.setSpacing(14)
 
         self.quick_access_tab_note = QLabel()
-        self.quick_access_tab_note.setWordWrap(True)
+        self._configure_note_label(self.quick_access_tab_note)
         layout.addWidget(self.quick_access_tab_note)
 
         self.quick_access_card = QFrame()
@@ -682,13 +699,15 @@ class CommandCenterPage(QWidget):
         quick_layout.setSpacing(12)
 
         self.quick_access_title = QLabel()
+        self._configure_section_title_label(self.quick_access_title)
         quick_layout.addWidget(self.quick_access_title)
         self.quick_access_note = QLabel()
-        self.quick_access_note.setWordWrap(True)
+        self._configure_note_label(self.quick_access_note)
         quick_layout.addWidget(self.quick_access_note)
 
         self.quick_access_preview_frame = QFrame()
         self.quick_access_preview_frame.setObjectName("QuickAccessPreview")
+        apply_semantic_class(self.quick_access_preview_frame, "hero_card_class")
         self.quick_access_preview_layout = QGridLayout(self.quick_access_preview_frame)
         self.quick_access_preview_layout.setContentsMargins(0, 0, 0, 0)
         self.quick_access_preview_layout.setHorizontalSpacing(10)
@@ -701,6 +720,7 @@ class CommandCenterPage(QWidget):
         self.quick_access_combo = QComboBox()
         self.quick_add_row.addWidget(self.quick_access_combo, 1)
         self.quick_access_add_button = QPushButton()
+        apply_semantic_class(self.quick_access_add_button, "button_class")
         self.quick_access_add_button.clicked.connect(self._add_selected_quick_access_plugin)
         self.quick_add_row.addWidget(self.quick_access_add_button)
         quick_layout.addLayout(self.quick_add_row)
@@ -717,17 +737,22 @@ class CommandCenterPage(QWidget):
         self.quick_manage_row.addWidget(self.quick_access_list, 1)
 
         self.quick_actions_host = QWidget()
+        apply_semantic_class(self.quick_actions_host, "transparent_class")
         self.quick_actions_layout = QGridLayout(self.quick_actions_host)
         self.quick_actions_layout.setContentsMargins(0, 0, 0, 0)
         self.quick_actions_layout.setHorizontalSpacing(6)
         self.quick_actions_layout.setVerticalSpacing(6)
         self.quick_access_move_up_button = QPushButton()
+        apply_semantic_class(self.quick_access_move_up_button, "button_class")
         self.quick_access_move_up_button.clicked.connect(lambda: self._move_selected_quick_access(-1))
         self.quick_access_move_down_button = QPushButton()
+        apply_semantic_class(self.quick_access_move_down_button, "button_class")
         self.quick_access_move_down_button.clicked.connect(lambda: self._move_selected_quick_access(1))
         self.quick_access_open_button = QPushButton()
+        apply_semantic_class(self.quick_access_open_button, "button_class")
         self.quick_access_open_button.clicked.connect(self._open_selected_quick_access_plugin)
         self.quick_access_remove_button = QPushButton()
+        apply_semantic_class(self.quick_access_remove_button, "button_class")
         self.quick_access_remove_button.clicked.connect(self._remove_selected_quick_access_plugin)
         self._quick_action_buttons = [
             self.quick_access_move_up_button,
@@ -746,11 +771,11 @@ class CommandCenterPage(QWidget):
         layout.setSpacing(14)
 
         self.shortcut_note = QLabel()
-        self.shortcut_note.setWordWrap(True)
+        self._configure_note_label(self.shortcut_note)
         layout.addWidget(self.shortcut_note)
 
         self.shortcut_status_label = QLabel()
-        self.shortcut_status_label.setWordWrap(True)
+        self._configure_note_label(self.shortcut_status_label)
         layout.addWidget(self.shortcut_status_label)
 
         self.shortcut_actions = QHBoxLayout()
@@ -783,7 +808,7 @@ class CommandCenterPage(QWidget):
         layout.setSpacing(14)
 
         self.plugins_note = QLabel()
-        self.plugins_note.setWordWrap(True)
+        self._configure_note_label(self.plugins_note)
         layout.addWidget(self.plugins_note)
 
         self.plugins_table = QTableWidget(0, 11)
@@ -977,7 +1002,7 @@ class CommandCenterPage(QWidget):
                 self.quick_access_preview_layout.addWidget(tile, preview_count // preview_columns, preview_count % preview_columns)
                 preview_count += 1
         else:
-            empty = QLabel(self._pt("quick_access.empty", "No quick access tools selected yet."))
+            empty = QLabel(self.tr("quick_access.empty", "No quick access tools selected yet."))
             empty.setStyleSheet(muted_text_style(palette, size=13))
             self.quick_access_preview_layout.addWidget(empty, 0, 0, 1, preview_columns)
         if preview_count:
@@ -1162,14 +1187,14 @@ class CommandCenterPage(QWidget):
         self.shortcut_table.setRowCount(len(bindings))
         self.shortcut_table.setHorizontalHeaderLabels(
             [
-                self._pt("shortcuts.action", "Action"),
-                self._pt("shortcuts.sequence", "Shortcut"),
-                self._pt("shortcuts.scope", "Scope"),
+                self.tr("shortcuts.action", "Action"),
+                self.tr("shortcuts.sequence", "Shortcut"),
+                self.tr("shortcuts.scope", "Scope"),
             ]
         )
         scope_options = self.services.shortcut_manager.available_scopes()
         for row_index, binding in enumerate(bindings):
-            title = self._pt(f"shortcut.action.{binding.action_id}", binding.title)
+            title = self.tr(f"shortcut.action.{binding.action_id}", binding.title)
             title_item = QTableWidgetItem(title)
             title_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
             self.shortcut_table.setItem(row_index, 0, title_item)
@@ -1177,7 +1202,7 @@ class CommandCenterPage(QWidget):
 
             combo = QComboBox()
             for scope_id, label in scope_options:
-                combo.addItem(self._pt(f"shortcut.scope.{scope_id}", label), scope_id)
+                combo.addItem(self.tr(f"shortcut.scope.{scope_id}", label), scope_id)
             self._set_combo_value(combo, binding.scope)
             combo.currentIndexChanged.connect(
                 lambda _index, action_id=binding.action_id, widget=combo: self._handle_shortcut_scope_changed(action_id, widget)
@@ -1195,16 +1220,16 @@ class CommandCenterPage(QWidget):
             self.plugins_table.setHorizontalHeaderLabels(
                 [
                     "",
-                    self._pt("plugins.icon", "Icon"),
-                    self._pt("plugins.name", "Plugin"),
-                    self._pt("plugins.category", "Category"),
-                    self._pt("plugins.source", "Source"),
-                    self._pt("plugins.trusted", "Trusted"),
-                    self._pt("plugins.enabled", "Enabled"),
-                    self._pt("plugins.hidden", "Hidden"),
-                    self._pt("plugins.risk", "Risk"),
-                    self._pt("plugins.status", "Status"),
-                    self._pt("plugins.file", "File"),
+                    self.tr("plugins.icon", "Icon"),
+                    self.tr("plugins.name", "Plugin"),
+                    self.tr("plugins.category", "Category"),
+                    self.tr("plugins.source", "Source"),
+                    self.tr("plugins.trusted", "Trusted"),
+                    self.tr("plugins.enabled", "Enabled"),
+                    self.tr("plugins.hidden", "Hidden"),
+                    self.tr("plugins.risk", "Risk"),
+                    self.tr("plugins.status", "Status"),
+                    self.tr("plugins.file", "File"),
                 ]
             )
             language = self.services.i18n.current_language()
@@ -1224,11 +1249,11 @@ class CommandCenterPage(QWidget):
                 name_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self.plugins_table.setItem(row_index, 2, name_item)
 
-                category_item = QTableWidgetItem(spec.localized_category(language) or self._pt("plugins.standalone", "Standalone"))
+                category_item = QTableWidgetItem(spec.localized_category(language) or self.tr("plugins.standalone", "Standalone"))
                 category_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self.plugins_table.setItem(row_index, 3, category_item)
 
-                source_item = QTableWidgetItem(self._pt(f"plugins.source.{spec.source_type.lower()}", spec.source_type.title()))
+                source_item = QTableWidgetItem(self.tr(f"plugins.source.{spec.source_type.lower()}", spec.source_type.title()))
                 source_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self.plugins_table.setItem(row_index, 4, source_item)
 
@@ -1253,7 +1278,7 @@ class CommandCenterPage(QWidget):
                 hidden_item.setCheckState(Qt.CheckState.Checked if spec.hidden else Qt.CheckState.Unchecked)
                 self.plugins_table.setItem(row_index, 7, hidden_item)
 
-                risk_item = QTableWidgetItem(self._pt(f"plugins.risk.{spec.risk_level.lower()}", spec.risk_level.title()))
+                risk_item = QTableWidgetItem(self.tr(f"plugins.risk.{spec.risk_level.lower()}", spec.risk_level.title()))
                 risk_item.setToolTip(self._plugin_review_details(spec))
                 risk_item.setFlags(Qt.ItemFlag.ItemIsSelectable | Qt.ItemFlag.ItemIsEnabled)
                 self._style_risk_item(risk_item, spec.risk_level)
@@ -1278,6 +1303,7 @@ class CommandCenterPage(QWidget):
 
     def _make_action_button(self, icon_name: str, handler) -> QToolButton:
         button = QToolButton()
+        apply_semantic_class(button, "button_class")
         button.setAutoRaise(False)
         button.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
         button.setIcon(icon_from_name(icon_name, self) or self.style().standardIcon(QStyle.StandardPixmap.SP_FileIcon))
@@ -1289,15 +1315,15 @@ class CommandCenterPage(QWidget):
     def _row_action_widget(self, spec, *, selected: bool) -> QWidget:
         container = QWidget()
         container.setAttribute(Qt.WidgetAttribute.WA_StyledBackground, False)
-        container.setStyleSheet("background: transparent;")
+        apply_semantic_class(container, "transparent_class")
         layout = QHBoxLayout(container)
         layout.setContentsMargins(4, 0, 4, 0)
         layout.setSpacing(2)
 
         export_check = QCheckBox()
-        export_check.setStyleSheet("background: transparent;")
+        apply_semantic_class(export_check, "transparent_class")
         export_check.setChecked(selected)
-        export_check.setToolTip(self._pt("plugins.export", "Select for export"))
+        export_check.setToolTip(self.tr("plugins.export", "Select for export"))
         layout.addWidget(export_check)
         return container
 
@@ -1314,8 +1340,8 @@ class CommandCenterPage(QWidget):
             self,
             title=title,
             body=body,
-            confirm_text=self._pt("confirm.continue", "Continue"),
-            cancel_text=self._pt("confirm.cancel", "Cancel"),
+            confirm_text=self.tr("confirm.continue", "Continue"),
+            cancel_text=self.tr("confirm.cancel", "Cancel"),
         )
 
     def _begin_row_edit(self, plugin_id: str) -> None:
@@ -1457,7 +1483,7 @@ class CommandCenterPage(QWidget):
         if spec.source_type == "custom" and spec.risk_level == "critical" and (trusted or enabled):
             self.services.plugin_state_manager.quarantine(
                 spec.plugin_id,
-                self._pt(
+                self.tr(
                     "plugins.blocked.reason",
                     "The static safety scan detected critical-risk patterns. This plugin remains quarantined until removed or replaced.",
                 ),
@@ -1468,8 +1494,8 @@ class CommandCenterPage(QWidget):
             self._set_plugin_item_check_state(enabled_item, False)
             QMessageBox.warning(
                 self,
-                self._pt("plugins.blocked.title", "Plugins blocked"),
-                self._pt(
+                self.tr("plugins.blocked.title", "Plugins blocked"),
+                self.tr(
                     "plugins.blocked.body",
                     "These custom plugins remain blocked because the static scan detected critical-risk patterns:\n\n{plugins}",
                     plugins=f"- {self.services.plugin_display_name(spec)}",
@@ -1478,14 +1504,14 @@ class CommandCenterPage(QWidget):
         elif spec.source_type == "custom" and trusted and not spec.trusted and spec.risk_level in {"medium", "high"}:
             confirmed = confirm_action(
                 self,
-                title=self._pt("plugins.review_prompt.title", "Trust custom plugins?"),
-                body=self._pt(
+                title=self.tr("plugins.review_prompt.title", "Trust custom plugins?"),
+                body=self.tr(
                     "plugins.review_prompt.body",
                     "The following custom plugins contain medium or high risk markers from the static safety scan:\n\n{plugins}\n\nTrusting them will allow the app to import and run their code. Only continue if you trust the author and reviewed the plugin contents.",
                     plugins=f"- {self.services.plugin_display_name(spec)}",
                 ),
-                confirm_text=self._pt("plugins.review_prompt.confirm", "Trust and apply"),
-                cancel_text=self._pt("confirm.cancel", "Cancel"),
+                confirm_text=self.tr("plugins.review_prompt.confirm", "Trust and apply"),
+                cancel_text=self.tr("confirm.cancel", "Cancel"),
             )
             if not confirmed:
                 trusted = False
@@ -1496,8 +1522,8 @@ class CommandCenterPage(QWidget):
             self._set_plugin_item_check_state(enabled_item, False)
             QMessageBox.information(
                 self,
-                self._pt("plugins.trust_required.title", "Trust required"),
-                self._pt(
+                self.tr("plugins.trust_required.title", "Trust required"),
+                self.tr(
                     "plugins.trust_required.body",
                     "Review and trust this custom plugin before enabling it.",
                 ),
@@ -1521,42 +1547,42 @@ class CommandCenterPage(QWidget):
 
         menu = QMenu(self)
         if spec.allow_name_override:
-            rename_action = menu.addAction(self._pt("plugins.menu.rename", "Change name..."))
+            rename_action = menu.addAction(self.tr("plugins.menu.rename", "Change name..."))
             rename_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._change_plugin_name(plugin_id))
         if spec.allow_icon_override:
-            icon_action = menu.addAction(self._pt("plugins.menu.icon", "Change icon..."))
+            icon_action = menu.addAction(self.tr("plugins.menu.icon", "Change icon..."))
             icon_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._change_plugin_icon(plugin_id))
-        reset_visuals = menu.addAction(self._pt("plugins.menu.reset_visuals", "Reset name and icon"))
+        reset_visuals = menu.addAction(self.tr("plugins.menu.reset_visuals", "Reset name and icon"))
         reset_visuals.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._reset_plugin_visuals(plugin_id))
 
         menu.addSeparator()
-        enabled_action = menu.addAction(self._pt("plugins.menu.toggle_enabled", "Toggle enabled"))
+        enabled_action = menu.addAction(self.tr("plugins.menu.toggle_enabled", "Toggle enabled"))
         enabled_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 6))
-        hidden_action = menu.addAction(self._pt("plugins.menu.toggle_hidden", "Toggle hidden"))
+        hidden_action = menu.addAction(self.tr("plugins.menu.toggle_hidden", "Toggle hidden"))
         hidden_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 7))
         if spec.source_type != "builtin":
-            trusted_action = menu.addAction(self._pt("plugins.menu.toggle_trusted", "Toggle trusted"))
+            trusted_action = menu.addAction(self.tr("plugins.menu.toggle_trusted", "Toggle trusted"))
             trusted_action.triggered.connect(lambda _checked=False, current_row=row: self._toggle_plugin_row_check(current_row, 5))
 
         dependency_summary = self._plugin_dependency_summary(spec)
         if dependency_summary.has_manifest:
             menu.addSeparator()
-            view_deps_action = menu.addAction(self._pt("plugins.menu.view_deps", "View dependency file"))
+            view_deps_action = menu.addAction(self.tr("plugins.menu.view_deps", "View dependency file"))
             view_deps_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._view_plugin_dependency_file(plugin_id))
 
-            install_deps_action = menu.addAction(self._pt("plugins.menu.install_deps", "Install dependencies"))
+            install_deps_action = menu.addAction(self.tr("plugins.menu.install_deps", "Install dependencies"))
             install_deps_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._install_plugin_dependencies(plugin_id, repair=False))
 
-            repair_deps_action = menu.addAction(self._pt("plugins.menu.repair_deps", "Repair dependencies"))
+            repair_deps_action = menu.addAction(self.tr("plugins.menu.repair_deps", "Repair dependencies"))
             repair_deps_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._install_plugin_dependencies(plugin_id, repair=True))
 
-            clear_deps_action = menu.addAction(self._pt("plugins.menu.clear_deps", "Clear dependencies"))
+            clear_deps_action = menu.addAction(self.tr("plugins.menu.clear_deps", "Clear dependencies"))
             clear_deps_action.triggered.connect(lambda _checked=False, plugin_id=spec.plugin_id: self._clear_plugin_dependencies(plugin_id))
 
         details = self._plugin_review_details(spec)
         if details:
             menu.addSeparator()
-            review_action = menu.addAction(self._pt("plugins.menu.review", "Review details"))
+            review_action = menu.addAction(self.tr("plugins.menu.review", "Review details"))
             review_action.triggered.connect(
                 lambda _checked=False, text=details, title=self.services.plugin_display_name(spec): QMessageBox.information(self, title, text)
             )
@@ -1570,8 +1596,8 @@ class CommandCenterPage(QWidget):
         if not summary.has_manifest or summary.manifest_path is None:
             QMessageBox.information(
                 self,
-                self._pt("plugins.deps.none.title", "No dependency file"),
-                self._pt("plugins.deps.none.body", "This plugin does not declare a dependency sidecar."),
+                self.tr("plugins.deps.none.title", "No dependency file"),
+                self.tr("plugins.deps.none.body", "This plugin does not declare a dependency sidecar."),
             )
             return
         QDesktopServices.openUrl(QUrl.fromLocalFile(str(summary.manifest_path)))
@@ -1585,8 +1611,8 @@ class CommandCenterPage(QWidget):
         if not spec.trusted:
             QMessageBox.warning(
                 self,
-                self._pt("plugins.deps.review_required.title", "Trust required"),
-                self._pt(
+                self.tr("plugins.deps.review_required.title", "Trust required"),
+                self.tr(
                     "plugins.deps.review_required.body",
                     "Review and trust this custom plugin before installing its dependencies.",
                 ),
@@ -1596,27 +1622,27 @@ class CommandCenterPage(QWidget):
         if not summary.has_manifest:
             QMessageBox.information(
                 self,
-                self._pt("plugins.deps.none.title", "No dependency file"),
-                self._pt("plugins.deps.none.body", "This plugin does not declare a dependency sidecar."),
+                self.tr("plugins.deps.none.title", "No dependency file"),
+                self.tr("plugins.deps.none.body", "This plugin does not declare a dependency sidecar."),
             )
             return
         if repair:
             confirmed = confirm_action(
                 self,
-                title=self._pt("plugins.deps.repair.title", "Repair dependencies?"),
-                body=self._pt(
+                title=self.tr("plugins.deps.repair.title", "Repair dependencies?"),
+                body=self.tr(
                     "plugins.deps.repair.body",
                     "This will clear the current dependency runtime for this plugin and reinstall it from the dependency sidecar.",
                 ),
-                confirm_text=self._pt("plugins.menu.repair_deps", "Repair dependencies"),
-                cancel_text=self._pt("confirm.cancel", "Cancel"),
+                confirm_text=self.tr("plugins.menu.repair_deps", "Repair dependencies"),
+                cancel_text=self.tr("confirm.cancel", "Cancel"),
             )
             if not confirmed:
                 return
         window = self.services.main_window
         if window is not None:
             window.begin_loading(
-                self._pt(
+                self.tr(
                     "loading.plugin_deps_repair" if repair else "loading.plugin_deps_install",
                     "Repairing plugin dependencies..." if repair else "Installing plugin dependencies...",
                 )
@@ -1627,8 +1653,8 @@ class CommandCenterPage(QWidget):
             self.services.reload_plugins()
             QMessageBox.information(
                 self,
-                self._pt("plugins.deps.installed.title", "Dependencies ready"),
-                self._pt(
+                self.tr("plugins.deps.installed.title", "Dependencies ready"),
+                self.tr(
                     "plugins.deps.installed.body",
                     "Dependencies for {plugin} were installed into {path}.",
                     plugin=self.services.plugin_display_name(spec),
@@ -1637,10 +1663,10 @@ class CommandCenterPage(QWidget):
             )
 
         def _on_error(payload: object) -> None:
-            message = payload.get("message", self._pt("plugins.deps.failed.body", "Dependency installation failed.")) if isinstance(payload, dict) else str(payload)
+            message = payload.get("message", self.tr("plugins.deps.failed.body", "Dependency installation failed.")) if isinstance(payload, dict) else str(payload)
             QMessageBox.critical(
                 self,
-                self._pt("plugins.deps.failed.title", "Dependency installation failed"),
+                self.tr("plugins.deps.failed.title", "Dependency installation failed"),
                 message,
             )
             self._populate_plugin_table()
@@ -1665,19 +1691,19 @@ class CommandCenterPage(QWidget):
         if not summary.has_manifest:
             QMessageBox.information(
                 self,
-                self._pt("plugins.deps.none.title", "No dependency file"),
-                self._pt("plugins.deps.none.body", "This plugin does not declare a dependency sidecar."),
+                self.tr("plugins.deps.none.title", "No dependency file"),
+                self.tr("plugins.deps.none.body", "This plugin does not declare a dependency sidecar."),
             )
             return
         confirmed = confirm_action(
             self,
-            title=self._pt("plugins.deps.clear.title", "Clear plugin dependencies?"),
-            body=self._pt(
+            title=self.tr("plugins.deps.clear.title", "Clear plugin dependencies?"),
+            body=self.tr(
                 "plugins.deps.clear.body",
                 "This will remove the installed dependency runtime for this plugin. You can reinstall it later from the same dependency sidecar.",
             ),
-            confirm_text=self._pt("plugins.menu.clear_deps", "Clear dependencies"),
-            cancel_text=self._pt("confirm.cancel", "Cancel"),
+            confirm_text=self.tr("plugins.menu.clear_deps", "Clear dependencies"),
+            cancel_text=self.tr("confirm.cancel", "Cancel"),
         )
         if not confirmed:
             return
@@ -1685,14 +1711,14 @@ class CommandCenterPage(QWidget):
         self.services.reload_plugins()
         QMessageBox.information(
             self,
-            self._pt("plugins.deps.cleared.title", "Dependencies cleared"),
-            self._pt(
+            self.tr("plugins.deps.cleared.title", "Dependencies cleared"),
+            self.tr(
                 "plugins.deps.cleared.body",
                 "Dependency runtime cleared for {plugin}.",
                 plugin=self.services.plugin_display_name(spec),
             )
             if removed
-            else self._pt(
+            else self.tr(
                 "plugins.deps.cleared.empty",
                 "No installed dependency runtime was found for {plugin}.",
                 plugin=self.services.plugin_display_name(spec),
@@ -1707,8 +1733,8 @@ class CommandCenterPage(QWidget):
         current_text = current_override or self.services.plugin_display_name(spec)
         value, accepted = QInputDialog.getText(
             self,
-            self._pt("plugins.rename.title", "Change display name"),
-            self._pt("plugins.rename.prompt", "Display name"),
+            self.tr("plugins.rename.title", "Change display name"),
+            self.tr("plugins.rename.prompt", "Display name"),
             text=current_text,
         )
         if not accepted:
@@ -1740,7 +1766,7 @@ class CommandCenterPage(QWidget):
 
     def _browse_output_dir(self) -> None:
         current = self.output_dir_input.text().strip() or str(self.services.default_output_path())
-        selected = QFileDialog.getExistingDirectory(self, self._pt("output.browse", "Choose output folder"), current)
+        selected = QFileDialog.getExistingDirectory(self, self.tr("output.browse", "Choose output folder"), current)
         if selected:
             self.output_dir_input.setText(selected)
             self._commit_output_dir()
@@ -1780,8 +1806,8 @@ class CommandCenterPage(QWidget):
             self.output_dir_input.blockSignals(False)
             QMessageBox.warning(
                 self,
-                self._pt("output.invalid.title", "Output folder unavailable"),
-                self._pt(
+                self.tr("output.invalid.title", "Output folder unavailable"),
+                self.tr(
                     "output.invalid.body",
                     "The selected output folder could not be used:\n\n{error}",
                     error=str(exc),
@@ -1845,8 +1871,8 @@ class CommandCenterPage(QWidget):
             self._suspend_live_updates = False
             QMessageBox.warning(
                 self,
-                self._pt("startup.failed.title", "Startup preference unavailable"),
-                self._pt(
+                self.tr("startup.failed.title", "Startup preference unavailable"),
+                self.tr(
                     "startup.failed.body",
                     "The startup preference could not be updated:\n\n{error}",
                     error=str(exc),
@@ -1875,8 +1901,8 @@ class CommandCenterPage(QWidget):
 
     def _reset_general_defaults(self) -> None:
         if not self._confirm_risky(
-            self._pt("confirm.reset_general.title", "Reset general settings?"),
-            self._pt("confirm.reset_general.body", "This will reset appearance, language preview, tray behavior, startup behavior, and backup settings in this tab back to their defaults."),
+            self.tr("confirm.reset_general.title", "Reset general settings?"),
+            self.tr("confirm.reset_general.body", "This will reset appearance, language preview, tray behavior, startup behavior, and backup settings in this tab back to their defaults."),
         ):
             return
         defaults = DEFAULT_CONFIG
@@ -1942,8 +1968,8 @@ class CommandCenterPage(QWidget):
 
     def _reset_shortcut_defaults(self) -> None:
         if not self._confirm_risky(
-            self._pt("confirm.reset_shortcuts.title", "Reset shortcuts?"),
-            self._pt("confirm.reset_shortcuts.body", "This will replace the current shortcut edits in this tab with the default shortcut bindings."),
+            self.tr("confirm.reset_shortcuts.title", "Reset shortcuts?"),
+            self.tr("confirm.reset_shortcuts.body", "This will replace the current shortcut edits in this tab with the default shortcut bindings."),
         ):
             return
         bindings = self.services.shortcut_manager.list_bindings()
@@ -1962,8 +1988,8 @@ class CommandCenterPage(QWidget):
 
     def _reset_plugin_defaults(self) -> None:
         if not self._confirm_risky(
-            self._pt("confirm.reset_plugins.title", "Reset plugin defaults?"),
-            self._pt("confirm.reset_plugins.body", "This will reset plugin overrides and plugin state entries back to their defaults. A safety backup will be attempted first."),
+            self.tr("confirm.reset_plugins.title", "Reset plugin defaults?"),
+            self.tr("confirm.reset_plugins.body", "This will reset plugin overrides and plugin state entries back to their defaults. A safety backup will be attempted first."),
         ):
             return
         if not self._create_safety_backup("plugin_reset"):
@@ -1984,29 +2010,29 @@ class CommandCenterPage(QWidget):
                     },
                 )
         self.services.reload_plugins()
-        QMessageBox.information(self, self._pt("plugins.reset.title", "Plugins reset"), self._pt("plugins.reset.body", "Plugin overrides and states were reset to their defaults."))
+        QMessageBox.information(self, self.tr("plugins.reset.title", "Plugins reset"), self.tr("plugins.reset.body", "Plugin overrides and states were reset to their defaults."))
 
     def _create_backup_now(self) -> None:
         window = self.services.main_window
         if window is not None:
-            window.begin_loading(self._pt("loading.backup", "Creating encrypted backup..."))
+            window.begin_loading(self.tr("loading.backup", "Creating encrypted backup..."))
         try:
             backup_path = self.services.create_backup(reason="manual")
         except Exception as exc:
             if window is not None:
                 window.end_loading()
-            QMessageBox.critical(self, self._pt("backup.failed.title", "Backup failed"), str(exc))
+            QMessageBox.critical(self, self.tr("backup.failed.title", "Backup failed"), str(exc))
             return
         if window is not None:
             window.end_loading()
         self._refresh_backup_status()
-        QMessageBox.information(self, self._pt("backup.created.title", "Backup created"), self._pt("backup.created.body", "Encrypted backup written to {path}", path=str(backup_path)))
+        QMessageBox.information(self, self.tr("backup.created.title", "Backup created"), self.tr("backup.created.body", "Encrypted backup written to {path}", path=str(backup_path)))
 
     def _restore_backup_from_file(self) -> None:
         start_dir = self.services.backup_manager.backups_root
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            self._pt("backup.restore_dialog", "Restore encrypted backup"),
+            self.tr("backup.restore_dialog", "Restore encrypted backup"),
             str(start_dir),
             "Micro Toolkit Backup (*.mtkbak)",
         )
@@ -2014,27 +2040,27 @@ class CommandCenterPage(QWidget):
             return
         confirmed = confirm_action(
             self,
-            title=self._pt("backup.restore_confirm.title", "Restore backup"),
-            body=self._pt("backup.restore_confirm.body", "This will overwrite app data and may replace bundled files. Continue?"),
-            confirm_text=self._pt("backup.restore", "Restore backup"),
-            cancel_text=self._pt("confirm.cancel", "Cancel"),
+            title=self.tr("backup.restore_confirm.title", "Restore backup"),
+            body=self.tr("backup.restore_confirm.body", "This will overwrite app data and may replace bundled files. Continue?"),
+            confirm_text=self.tr("backup.restore", "Restore backup"),
+            cancel_text=self.tr("confirm.cancel", "Cancel"),
         )
         if not confirmed:
             return
         window = self.services.main_window
         if window is not None:
-            window.begin_loading(self._pt("loading.restore", "Restoring backup..."))
+            window.begin_loading(self.tr("loading.restore", "Restoring backup..."))
         try:
             self.services.restore_backup(Path(file_path))
         except Exception as exc:
             if window is not None:
                 window.end_loading()
-            QMessageBox.critical(self, self._pt("backup.failed.title", "Backup failed"), str(exc))
+            QMessageBox.critical(self, self.tr("backup.failed.title", "Backup failed"), str(exc))
             return
         if window is not None:
             window.end_loading()
         self._refresh_backup_status()
-        QMessageBox.information(self, self._pt("backup.restored.title", "Backup restored"), self._pt("backup.restored.body", "The backup was restored. Restart Micro Toolkit to ensure every file is reloaded cleanly."))
+        QMessageBox.information(self, self.tr("backup.restored.title", "Backup restored"), self.tr("backup.restored.body", "The backup was restored. Restart Micro Toolkit to ensure every file is reloaded cleanly."))
 
     def _create_safety_backup(self, reason: str) -> bool:
         try:
@@ -2044,10 +2070,10 @@ class CommandCenterPage(QWidget):
         except Exception as exc:
             return confirm_action(
                 self,
-                title=self._pt("backup.safety_failed.title", "Backup unavailable"),
-                body=self._pt("backup.safety_failed.body", "A safety backup could not be created before this reset:\n\n{error}\n\nContinue anyway?", error=str(exc)),
-                confirm_text=self._pt("confirm.continue", "Continue"),
-                cancel_text=self._pt("confirm.cancel", "Cancel"),
+                title=self.tr("backup.safety_failed.title", "Backup unavailable"),
+                body=self.tr("backup.safety_failed.body", "A safety backup could not be created before this reset:\n\n{error}\n\nContinue anyway?", error=str(exc)),
+                confirm_text=self.tr("confirm.continue", "Continue"),
+                cancel_text=self.tr("confirm.cancel", "Cancel"),
             )
 
     def _refresh_backup_status(self) -> None:
@@ -2058,13 +2084,13 @@ class CommandCenterPage(QWidget):
             # Wrap date in RTL marker if we are in an RTL layout to prevent flip issues with hyphens/colons
             latest = f"\u200f{latest_raw}" if self.services.i18n.is_rtl() else latest_raw
         else:
-            latest = self._pt("backup.none", "No backups yet")
+            latest = self.tr("backup.none", "No backups yet")
             
         schedule_key = str(self.backup_schedule_combo.currentData() or self.services.backup_manager.schedule()).lower()
-        schedule_text = self._pt(f"backup.schedule.{schedule_key}", schedule_key.title())
+        schedule_text = self.tr(f"backup.schedule.{schedule_key}", schedule_key.title())
         
         self.backup_status_label.setText(
-            self._pt(
+            self.tr(
                 "backup.status",
                 "Schedule: {schedule}. Last backup: {latest}.",
                 schedule=schedule_text,
@@ -2077,7 +2103,7 @@ class CommandCenterPage(QWidget):
         helper_manager = self.services.hotkey_helper_manager
         if shortcut_manager.direct_global_hotkeys_supported():
             self.shortcut_status_label.setText(
-                self._pt(
+                self.tr(
                     "shortcuts.status.available",
                     "Global shortcut registration is available in this session.",
                 )
@@ -2088,35 +2114,35 @@ class CommandCenterPage(QWidget):
 
         if helper_manager.is_active():
             self.shortcut_status_label.setText(
-                self._pt(
+                self.tr(
                     "shortcuts.status.helper_active",
                     "The elevated hotkey helper is active for this session. Global shortcuts will be routed through the helper process.",
                 )
             )
             self.start_helper_button.setVisible(False)
             self.stop_helper_button.setVisible(True)
-            self.stop_helper_button.setText(self._pt("shortcuts.stop_helper", "Stop Hotkey Helper"))
+            self.stop_helper_button.setText(self.tr("shortcuts.stop_helper", "Stop Hotkey Helper"))
             return
 
-        reason = helper_manager.helper_reason() or self._pt(
+        reason = helper_manager.helper_reason() or self.tr(
             "shortcuts.status.unavailable",
             "Global shortcuts are unavailable in this session.",
         )
         if helper_manager.can_request_helper():
             self.shortcut_status_label.setText(
-                self._pt(
+                self.tr(
                     "shortcuts.status.helper_available",
                     "Global shortcuts are currently unavailable. {reason} Start the hotkey helper if you want global capture without elevating the main app.",
                     reason=reason,
                 )
             )
             self.start_helper_button.setVisible(True)
-            self.start_helper_button.setText(self._pt("shortcuts.start_helper", "Start Hotkey Helper"))
+            self.start_helper_button.setText(self.tr("shortcuts.start_helper", "Start Hotkey Helper"))
             self.stop_helper_button.setVisible(False)
             return
 
         self.shortcut_status_label.setText(
-            self._pt(
+            self.tr(
                 "shortcuts.status.no_helper",
                 "Global shortcuts are currently unavailable. {reason}",
                 reason=reason,
@@ -2131,14 +2157,14 @@ class CommandCenterPage(QWidget):
         except Exception as exc:
             QMessageBox.warning(
                 self,
-                self._pt("shortcuts.helper_failed.title", "Helper unavailable"),
+                self.tr("shortcuts.helper_failed.title", "Helper unavailable"),
                 str(exc),
             )
             return
         QMessageBox.information(
             self,
-            self._pt("shortcuts.helper_started.title", "Helper started"),
-            str(result.get("message", self._pt("shortcuts.helper_started.body", "The hotkey helper is now active for this session."))),
+            self.tr("shortcuts.helper_started.title", "Helper started"),
+            str(result.get("message", self.tr("shortcuts.helper_started.body", "The hotkey helper is now active for this session."))),
         )
         self._refresh_shortcut_status()
 
@@ -2149,42 +2175,42 @@ class CommandCenterPage(QWidget):
     def _icon_options(self) -> list[tuple[str, str, object]]:
         rows: list[tuple[str, str, object]] = []
         for icon_id, fallback_label, icon in icon_choices(self):
-            label = self._pt(f"plugins.icon.{icon_id.replace('-', '_')}", fallback_label)
+            label = self.tr(f"plugins.icon.{icon_id.replace('-', '_')}", fallback_label)
             rows.append((icon_id, label, icon))
         return rows
 
     def _plugin_status_text(self, spec) -> str:
         dependency_summary = self._plugin_dependency_summary(spec)
         if spec.quarantined:
-            base = self._pt("plugins.status.quarantined", "Quarantined")
+            base = self.tr("plugins.status.quarantined", "Quarantined")
         elif spec.source_type == "custom" and not spec.trusted:
-            base = self._pt("plugins.status.review", "Pending Review")
+            base = self.tr("plugins.status.review", "Pending Review")
         elif not spec.enabled:
-            base = self._pt("plugins.status.disabled", "Disabled")
+            base = self.tr("plugins.status.disabled", "Disabled")
         elif spec.last_error:
-            base = self._pt("plugins.status.error", "Error Recorded")
+            base = self.tr("plugins.status.error", "Error Recorded")
         else:
-            base = self._pt("plugins.status.ready", "Ready")
+            base = self.tr("plugins.status.ready", "Ready")
         if not dependency_summary.has_manifest:
             return base
         dependency_status = self._plugin_dependency_status_text(dependency_summary)
-        return self._pt("plugins.status.with_deps", "{status} · {deps}", status=base, deps=dependency_status)
+        return self.tr("plugins.status.with_deps", "{status} · {deps}", status=base, deps=dependency_status)
 
     def _plugin_dependency_summary(self, spec):
         return self.services.plugin_dependency_manager.summary_for_spec(spec)
 
     def _plugin_dependency_status_text(self, summary) -> str:
-        return self._pt(f"plugins.deps.status.{summary.status}", summary.message.replace("_", " ").title())
+        return self.tr(f"plugins.deps.status.{summary.status}", summary.message.replace("_", " ").title())
 
     def _plugin_review_details(self, spec) -> str:
         details: list[str] = []
         if spec.risk_summary:
             details.append(spec.risk_summary)
         if spec.last_error:
-            details.append(self._pt("plugins.error_detail", "Last error: {error}", error=spec.last_error))
+            details.append(self.tr("plugins.error_detail", "Last error: {error}", error=spec.last_error))
         if spec.failure_count:
             details.append(
-                self._pt(
+                self.tr(
                     "plugins.failure_detail",
                     "Failure count: {count}",
                     count=str(spec.failure_count),
@@ -2193,14 +2219,14 @@ class CommandCenterPage(QWidget):
         dependency_summary = self._plugin_dependency_summary(spec)
         if dependency_summary.has_manifest:
             details.append(
-                self._pt(
+                self.tr(
                     "plugins.deps.detail.status",
                     "Dependency status: {status}",
                     status=self._plugin_dependency_status_text(dependency_summary),
                 )
             )
             details.append(
-                self._pt(
+                self.tr(
                     "plugins.deps.detail.file",
                     "Dependency file: {path}",
                     path=str(dependency_summary.manifest_path),
@@ -2208,7 +2234,7 @@ class CommandCenterPage(QWidget):
             )
             if dependency_summary.warning:
                 details.append(
-                    self._pt(
+                    self.tr(
                         "plugins.deps.detail.warning",
                         "Dependency warning: {warning}",
                         warning=dependency_summary.warning,
@@ -2216,7 +2242,7 @@ class CommandCenterPage(QWidget):
                 )
             if dependency_summary.error:
                 details.append(
-                    self._pt(
+                    self.tr(
                         "plugins.deps.detail.error",
                         "Dependency error: {error}",
                         error=dependency_summary.error,
@@ -2235,8 +2261,8 @@ class CommandCenterPage(QWidget):
 
     def _apply_plugin_states(self) -> None:
         if not self._confirm_risky(
-            self._pt("confirm.apply_plugins.title", "Apply plugin changes?"),
-            self._pt("confirm.apply_plugins.body", "This will apply trust, enable, and hidden-state changes for the listed plugins."),
+            self.tr("confirm.apply_plugins.title", "Apply plugin changes?"),
+            self.tr("confirm.apply_plugins.body", "This will apply trust, enable, and hidden-state changes for the listed plugins."),
         ):
             return
         specs = self.services.manageable_plugin_specs(include_disabled=True)
@@ -2269,14 +2295,14 @@ class CommandCenterPage(QWidget):
         if pending_risk_review:
             confirmed = confirm_action(
                 self,
-                title=self._pt("plugins.review_prompt.title", "Trust custom plugins?"),
-                body=self._pt(
+                title=self.tr("plugins.review_prompt.title", "Trust custom plugins?"),
+                body=self.tr(
                     "plugins.review_prompt.body",
                     "The following custom plugins contain medium or high risk markers from the static safety scan:\n\n{plugins}\n\nTrusting them will allow the app to import and run their code. Only continue if you trust the author and reviewed the plugin contents.",
                     plugins="\n".join(f"- {name}" for name in pending_risk_review),
                 ),
-                confirm_text=self._pt("plugins.review_prompt.confirm", "Trust and apply"),
-                cancel_text=self._pt("confirm.cancel", "Cancel"),
+                confirm_text=self.tr("plugins.review_prompt.confirm", "Trust and apply"),
+                cancel_text=self.tr("confirm.cancel", "Cancel"),
             )
             if not confirmed:
                 for index, (plugin_id, source_type, trusted, enabled, hidden, force_quarantine) in enumerate(updates):
@@ -2287,7 +2313,7 @@ class CommandCenterPage(QWidget):
             if force_quarantine:
                 self.services.plugin_state_manager.quarantine(
                     plugin_id,
-                    self._pt(
+                    self.tr(
                         "plugins.blocked.reason",
                         "The static safety scan detected critical-risk patterns. This plugin remains quarantined until removed or replaced.",
                     ),
@@ -2301,8 +2327,8 @@ class CommandCenterPage(QWidget):
         if forced_block:
             QMessageBox.warning(
                 self,
-                self._pt("plugins.blocked.title", "Plugins blocked"),
-                self._pt(
+                self.tr("plugins.blocked.title", "Plugins blocked"),
+                self.tr(
                     "plugins.blocked.body",
                     "These custom plugins remain blocked because the static scan detected critical-risk patterns:\n\n{plugins}",
                     plugins="\n".join(f"- {name}" for name in forced_block),
@@ -2310,15 +2336,15 @@ class CommandCenterPage(QWidget):
             )
         QMessageBox.information(
             self,
-            self._pt("plugins.applied.title", "Plugin settings updated"),
-            self._pt("plugins.applied.body", "Plugin trust, visibility, and enabled state were updated."),
+            self.tr("plugins.applied.title", "Plugin settings updated"),
+            self.tr("plugins.applied.body", "Plugin trust, visibility, and enabled state were updated."),
         )
         self.services.reload_plugins()
 
     def _import_plugin_file(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            self._pt("plugins.import_file", "Import plugin file"),
+            self.tr("plugins.import_file", "Import plugin file"),
             str(Path.home()),
             "Python Files (*.py)",
         )
@@ -2327,19 +2353,19 @@ class CommandCenterPage(QWidget):
         try:
             plugin_ids = self.services.plugin_package_manager.import_plugin_file(Path(file_path))
         except Exception as exc:
-            QMessageBox.critical(self, self._pt("plugins.import_failed.title", "Import failed"), str(exc))
+            QMessageBox.critical(self, self.tr("plugins.import_failed.title", "Import failed"), str(exc))
             return
         self.services.reload_plugins()
         self._show_plugin_import_result(plugin_ids)
 
     def _import_plugin_folder(self) -> None:
-        folder_path = QFileDialog.getExistingDirectory(self, self._pt("plugins.import_folder", "Import plugin folder"), str(Path.home()))
+        folder_path = QFileDialog.getExistingDirectory(self, self.tr("plugins.import_folder", "Import plugin folder"), str(Path.home()))
         if not folder_path:
             return
         try:
             plugin_ids = self.services.plugin_package_manager.import_plugin_folder(Path(folder_path))
         except Exception as exc:
-            QMessageBox.critical(self, self._pt("plugins.import_failed.title", "Import failed"), str(exc))
+            QMessageBox.critical(self, self.tr("plugins.import_failed.title", "Import failed"), str(exc))
             return
         self.services.reload_plugins()
         self._show_plugin_import_result(plugin_ids)
@@ -2347,16 +2373,16 @@ class CommandCenterPage(QWidget):
     def _import_plugin_package(self) -> None:
         file_path, _ = QFileDialog.getOpenFileName(
             self,
-            self._pt("plugins.import_package", "Import plugin package"),
+            self.tr("plugins.import_package", "Import plugin package"),
             str(Path.home()),
-            self._pt("plugins.import_package.filter", "Plugin Package (*.zip)"),
+            self.tr("plugins.import_package.filter", "Plugin Package (*.zip)"),
         )
         if not file_path:
             return
         try:
             plugin_ids = self.services.plugin_package_manager.import_plugin_package(Path(file_path))
         except Exception as exc:
-            QMessageBox.critical(self, self._pt("plugins.import_failed.title", "Import failed"), str(exc))
+            QMessageBox.critical(self, self.tr("plugins.import_failed.title", "Import failed"), str(exc))
             return
         self.services.reload_plugins()
         self._show_plugin_import_result(plugin_ids)
@@ -2370,7 +2396,7 @@ class CommandCenterPage(QWidget):
             summary = self._plugin_dependency_summary(spec)
             if summary.has_manifest:
                 dependency_plugins.append(self.services.plugin_display_name(spec))
-        body = self._pt(
+        body = self.tr(
             "plugins.imported.body",
             "Imported plugins: {plugins}. They were added disabled and untrusted pending review.",
             plugins=", ".join(plugin_ids),
@@ -2379,7 +2405,7 @@ class CommandCenterPage(QWidget):
             body = "\n\n".join(
                 [
                     body,
-                    self._pt(
+                    self.tr(
                         "plugins.imported.deps_body",
                         "Dependency sidecars were detected for: {plugins}. Review and trust those plugins first, then right-click a row to install or repair dependencies.",
                         plugins=", ".join(dependency_plugins),
@@ -2388,14 +2414,14 @@ class CommandCenterPage(QWidget):
             )
         QMessageBox.information(
             self,
-            self._pt("plugins.imported.title", "Plugin imported"),
+            self.tr("plugins.imported.title", "Plugin imported"),
             body,
         )
 
     def _export_selected_plugins(self) -> None:
         specs = self._selected_export_specs()
         if not specs:
-            QMessageBox.warning(self, self._pt("plugins.export_failed.title", "Nothing selected"), self._pt("plugins.export_failed.body", "Select at least one plugin to export."))
+            QMessageBox.warning(self, self.tr("plugins.export_failed.title", "Nothing selected"), self.tr("plugins.export_failed.body", "Select at least one plugin to export."))
             return
         self._export_specs(specs)
 
@@ -2407,9 +2433,9 @@ class CommandCenterPage(QWidget):
         suggested = Path.home() / "micro_toolkit_plugin_package.zip"
         file_path, _ = QFileDialog.getSaveFileName(
             self,
-            self._pt("plugins.export_dialog", "Export plugin package"),
+            self.tr("plugins.export_dialog", "Export plugin package"),
             str(suggested),
-            self._pt("plugins.export_dialog.filter", "Plugin Package (*.zip)"),
+            self.tr("plugins.export_dialog.filter", "Plugin Package (*.zip)"),
         )
         if not file_path:
             return
@@ -2419,12 +2445,12 @@ class CommandCenterPage(QWidget):
         try:
             exported = self.services.plugin_package_manager.export_plugins(specs, destination)
         except Exception as exc:
-            QMessageBox.critical(self, self._pt("plugins.export_failed.title", "Export failed"), str(exc))
+            QMessageBox.critical(self, self.tr("plugins.export_failed.title", "Export failed"), str(exc))
             return
         QMessageBox.information(
             self,
-            self._pt("plugins.exported.title", "Plugin package exported"),
-            self._pt("plugins.exported.body", "Plugin package written to {path}", path=str(exported)),
+            self.tr("plugins.exported.title", "Plugin package exported"),
+            self.tr("plugins.exported.body", "Plugin package written to {path}", path=str(exported)),
         )
 
     def _selected_export_specs(self):
@@ -2448,125 +2474,123 @@ class CommandCenterPage(QWidget):
     def _refresh_autostart_status(self) -> None:
         enabled = self.services.autostart_manager.is_enabled()
         key = "startup.enabled" if enabled else "startup.disabled"
-        self.autostart_status_label.setText(self._pt(key, "Autostart is disabled."))
+        self.autostart_status_label.setText(self.tr(key, "Autostart is disabled."))
 
     def _apply_texts(self) -> None:
-        palette = self.services.theme_manager.current_palette()
         self._apply_theme_styles()
-        self.title_label.setText(self._pt("title", "Command Center"))
+        self.title_label.setText(self.tr("title", "Command Center"))
         self.description_label.setText(
-            self._pt(
+            self.tr(
                 "description",
                 "Control appearance, language, startup behavior, tray behavior, shortcuts, and plugin management from one place.",
             )
         )
-        self.description_label.setStyleSheet(f"font-size: 14px; color: {palette.text_muted};")
-        self.tabs.setTabText(0, self._pt("tab.general", "General"))
-        self.tabs.setTabText(1, self._pt("tab.quick_access", "Quick Access"))
-        self.tabs.setTabText(2, self._pt("tab.shortcuts", "Shortcuts"))
-        self.tabs.setTabText(3, self._pt("tab.plugins", "Plugins"))
+        self.tabs.setTabText(0, self.tr("tab.general", "General"))
+        self.tabs.setTabText(1, self.tr("tab.quick_access", "Quick Access"))
+        self.tabs.setTabText(2, self.tr("tab.shortcuts", "Shortcuts"))
+        self.tabs.setTabText(3, self.tr("tab.plugins", "Plugins"))
 
-        self.output_label.setText(self._pt("output.label", "Default output folder"))
-        self.startup_page_label.setText(self._pt("output.startup_page", "Default startup page"))
-        self.output_browse_button.setText(self._pt("output.browse_button", "Browse"))
-        self.output_title.setText(self._pt("general.output.title", "Workspace"))
-        self.general_note.setText(self._pt("output.note", "Tools export into this folder by default, and the app can open straight to your preferred page on launch."))
+        self.output_label.setText(self.tr("output.label", "Default output folder"))
+        self.startup_page_label.setText(self.tr("output.startup_page", "Default startup page"))
+        self.output_browse_button.setText(self.tr("output.browse_button", "Browse"))
+        self.output_title.setText(self.tr("general.output.title", "Workspace"))
+        self.general_note.setText(self.tr("output.note", "Tools export into this folder by default, and the app can open straight to your preferred page on launch."))
         self._populate_startup_page_combo()
 
-        self.appearance_title.setText(self._pt("general.appearance.title", "Appearance"))
-        self.theme_label.setText(self._pt("theme.label", "Theme"))
+        self.appearance_title.setText(self.tr("general.appearance.title", "Appearance"))
+        self.theme_label.setText(self.tr("theme.label", "Theme"))
         color_labels = {
-            "pink": self._pt("theme.color.pink", "Pink"),
-            "blue": self._pt("theme.color.blue", "Blue"),
-            "orange": self._pt("theme.color.orange", "Orange"),
-            "green": self._pt("theme.color.green", "Green"),
-            "red": self._pt("theme.color.red", "Red"),
+            "pink": self.tr("theme.color.pink", "Pink"),
+            "blue": self.tr("theme.color.blue", "Blue"),
+            "orange": self.tr("theme.color.orange", "Orange"),
+            "green": self.tr("theme.color.green", "Green"),
+            "red": self.tr("theme.color.red", "Red"),
         }
         for color_key, button in self.theme_color_buttons.items():
             button.setToolTip(color_labels.get(color_key, color_key.title()))
-        self.dark_mode_checkbox.setText(self._pt("theme.dark_mode", "Dark Mode"))
-        self.language_label.setText(self._pt("language.label", "Language"))
-        self.density_label.setText(self._pt("density.label", "Density"))
-        self.scaling_label.setText(self._pt("scaling.label", "UI scaling"))
+        self.dark_mode_checkbox.setText(self.tr("theme.dark_mode", "Dark Mode"))
+        self.language_label.setText(self.tr("language.label", "Language"))
+        self.density_label.setText(self.tr("density.label", "Density"))
+        self.scaling_label.setText(self.tr("scaling.label", "UI scaling"))
         for code, button in self.language_buttons.items():
             for language_code, label in self.i18n.available_languages():
                 if code == language_code:
                     button.setText(label)
                     break
         self.appearance_note.setText(
-            self._pt("appearance.note", "Appearance and language changes apply immediately.")
+            self.tr("appearance.note", "Appearance and language changes apply immediately.")
         )
 
-        self.behavior_title.setText(self._pt("general.behavior.title", "Behavior"))
+        self.behavior_title.setText(self.tr("general.behavior.title", "Behavior"))
         self.behavior_note.setText(
-            self._pt(
+            self.tr(
                 "general.behavior.note",
                 "Tray handling, startup behavior, exit confirmation, and developer mode live together here so the app shell is easier to reason about.",
             )
         )
-        self.minimize_to_tray_checkbox.setText(self._pt("tray.minimize", "Minimize to system tray"))
-        self.close_to_tray_checkbox.setText(self._pt("tray.close", "Close to system tray"))
-        self.clip_monitor_checkbox.setText(self._pt("clip_monitor.toggle", "Enable Clip-Monitor"))
-        self.confirm_on_exit_checkbox.setText(self._pt("exit.confirm", "Always ask on exit"))
-        self.run_on_startup_checkbox.setText(self._pt("startup.run", "Start on system login"))
-        self.start_minimized_checkbox.setText(self._pt("startup.minimized", "Start minimized"))
-        self.developer_mode_checkbox.setText(self._pt("developer.mode", "Developer mode"))
-        self.backup_title.setText(self._pt("general.backup.title", "Backups"))
+        self.minimize_to_tray_checkbox.setText(self.tr("tray.minimize", "Minimize to system tray"))
+        self.close_to_tray_checkbox.setText(self.tr("tray.close", "Close to system tray"))
+        self.clip_monitor_checkbox.setText(self.tr("clip_monitor.toggle", "Enable Clip-Monitor"))
+        self.confirm_on_exit_checkbox.setText(self.tr("exit.confirm", "Always ask on exit"))
+        self.run_on_startup_checkbox.setText(self.tr("startup.run", "Start on system login"))
+        self.start_minimized_checkbox.setText(self.tr("startup.minimized", "Start minimized"))
+        self.developer_mode_checkbox.setText(self.tr("developer.mode", "Developer mode"))
+        self.backup_title.setText(self.tr("general.backup.title", "Backups"))
         self.backup_note.setText(
-            self._pt(
+            self.tr(
                 "general.backup.note",
                 "Keep an encrypted safety trail of your workspace state, then restore from here when you need to roll back quickly.",
             )
         )
-        self.backup_schedule_label.setText(self._pt("backup.schedule", "Backup intensity"))
+        self.backup_schedule_label.setText(self.tr("backup.schedule", "Backup intensity"))
         for index in range(self.backup_schedule_combo.count()):
             value = str(self.backup_schedule_combo.itemData(index) or "")
             text = {
-                "daily": self._pt("backup.schedule.daily", "Daily"),
-                "weekly": self._pt("backup.schedule.weekly", "Weekly"),
-                "monthly": self._pt("backup.schedule.monthly", "Monthly"),
+                "daily": self.tr("backup.schedule.daily", "Daily"),
+                "weekly": self.tr("backup.schedule.weekly", "Weekly"),
+                "monthly": self.tr("backup.schedule.monthly", "Monthly"),
             }.get(value, value.title())
             self.backup_schedule_combo.setItemText(index, text)
-        self.create_backup_button.setText(self._pt("backup.create", "Create backup"))
-        self.restore_backup_button.setText(self._pt("backup.restore", "Restore backup"))
+        self.create_backup_button.setText(self.tr("backup.create", "Create backup"))
+        self.restore_backup_button.setText(self.tr("backup.restore", "Restore backup"))
         self.quick_access_tab_note.setText(
-            self._pt(
+            self.tr(
                 "quick_access.tab_note",
                 "Build a desktop-style quick launch strip for your most-used tools. Add tools, reorder them, and test the launcher here.",
             )
         )
-        self.quick_access_title.setText(self._pt("quick_access.title", "Quick access"))
+        self.quick_access_title.setText(self.tr("quick_access.title", "Quick access"))
         self.quick_access_note.setText(
-            self._pt(
+            self.tr(
                 "quick_access.note",
                 "These icons mirror the dashboard launcher. Drag the list to reorder, or use the move buttons for precise placement.",
             )
         )
-        self.quick_access_add_button.setText(self._pt("quick_access.add", "Add"))
-        self.quick_access_move_up_button.setText(self._pt("quick_access.move_up", "Move up"))
-        self.quick_access_move_down_button.setText(self._pt("quick_access.move_down", "Move down"))
-        self.quick_access_open_button.setText(self._pt("quick_access.open", "Open"))
-        self.quick_access_remove_button.setText(self._pt("quick_access.remove", "Remove"))
+        self.quick_access_add_button.setText(self.tr("quick_access.add", "Add"))
+        self.quick_access_move_up_button.setText(self.tr("quick_access.move_up", "Move up"))
+        self.quick_access_move_down_button.setText(self.tr("quick_access.move_down", "Move down"))
+        self.quick_access_open_button.setText(self.tr("quick_access.open", "Open"))
+        self.quick_access_remove_button.setText(self.tr("quick_access.remove", "Remove"))
 
         self.shortcut_note.setText(
-            self._pt(
+            self.tr(
                 "shortcuts.note",
                 "Application shortcuts are always available while the app is focused. Global shortcuts are optional, may depend on desktop permissions, and shortcut edits apply immediately.",
             )
         )
         self.plugins_note.setText(
-            self._pt(
+            self.tr(
                 "plugins.note",
                 "Manage built-in and custom plugins here. Import plugin packages for the cleanest sharing flow, then use the table and context menu for direct trust, enabled, hidden, and display updates. Loose file and folder imports remain available for development and manual workflows.",
             )
         )
-        self.import_package_button.setText(self._pt("plugins.import_package_button", "Import Package"))
-        self.import_file_button.setText(self._pt("plugins.import_file_button", "Import File (Dev)"))
-        self.import_folder_button.setText(self._pt("plugins.import_folder_button", "Import Folder (Dev)"))
-        self.export_selected_button.setText(self._pt("plugins.export_selected", "Export Selected Package"))
-        self.export_all_button.setText(self._pt("plugins.export_all", "Export All Packages"))
-        self.reset_plugins_button.setText(self._pt("plugins.reset", "Reset plugin defaults"))
-        self.refresh_plugins_button.setText(self._pt("plugins.refresh", "Refresh"))
+        self.import_package_button.setText(self.tr("plugins.import_package_button", "Import Package"))
+        self.import_file_button.setText(self.tr("plugins.import_file_button", "Import File (Dev)"))
+        self.import_folder_button.setText(self.tr("plugins.import_folder_button", "Import Folder (Dev)"))
+        self.export_selected_button.setText(self.tr("plugins.export_selected", "Export Selected Package"))
+        self.export_all_button.setText(self.tr("plugins.export_all", "Export All Packages"))
+        self.reset_plugins_button.setText(self.tr("plugins.reset", "Reset plugin defaults"))
+        self.refresh_plugins_button.setText(self.tr("plugins.refresh", "Refresh"))
         self.import_package_button.setToolTip(self.import_package_button.text())
         self.import_file_button.setToolTip(self.import_file_button.text())
         self.import_folder_button.setToolTip(self.import_folder_button.text())
@@ -2575,8 +2599,8 @@ class CommandCenterPage(QWidget):
         self.reset_plugins_button.setToolTip(self.reset_plugins_button.text())
         self.refresh_plugins_button.setToolTip(self.refresh_plugins_button.text())
 
-        self.general_reset_button.setText(self._pt("reset", "Reset defaults"))
-        self.shortcuts_reset_button.setText(self._pt("shortcuts.reset", "Reset shortcuts"))
+        self.general_reset_button.setText(self.tr("reset", "Reset defaults"))
+        self.shortcuts_reset_button.setText(self.tr("shortcuts.reset", "Reset shortcuts"))
         self._populate_shortcuts()
         self._populate_plugin_table()
         self._refresh_autostart_status()
@@ -2758,10 +2782,10 @@ class CommandCenterPage(QWidget):
         self.setStyleSheet(
             f"""
             QWidget#CommandCenterPage {{
-                background: {palette.window_bg};
+                background: {palette.base_bg};
             }}
             QToolTip {{
-                background: {palette.surface_bg};
+                background: {palette.component_bg};
                 color: {palette.text_primary};
                 border: 1px solid {palette.border};
                 border-radius: 10px;
@@ -2779,36 +2803,22 @@ class CommandCenterPage(QWidget):
             self.density_host,
             self.scaling_host,
         ):
-            widget.setStyleSheet("background: transparent;")
-        self.tabs.setStyleSheet(
-            f"""
-            QTabWidget::pane {{
-                background: {palette.window_bg};
-                border: none;
-            }}
-            QTabBar::tab {{
-                background: {palette.surface_alt_bg};
-                color: {palette.text_muted};
-                border: 1px solid {palette.border};
-                border-bottom: none;
-                padding: 6px 12px;
-            }}
-            QTabBar::tab:selected {{
-                background: {palette.surface_bg};
-                color: {palette.text_primary};
-            }}
-            """
+            apply_semantic_class(widget, "transparent_class")
+        self.tabs.setStyleSheet("")
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.description_label,
+            cards=(
+                self.output_card,
+                self.appearance_card,
+                self.automation_card,
+                self.backup_card,
+                self.quick_access_card,
+            ),
+            title_size=26,
+            title_weight=700,
         )
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.description_label.setStyleSheet(muted_text_style(palette))
-        for frame in (
-            self.output_card,
-            self.appearance_card,
-            self.automation_card,
-            self.backup_card,
-            self.quick_access_card,
-        ):
-            frame.setStyleSheet(card_style(palette))
         for label in (
             self.general_note,
             self.appearance_note,
@@ -2830,20 +2840,10 @@ class CommandCenterPage(QWidget):
         ):
             label.setStyleSheet(section_title_style(palette, size=18))
         self.quick_access_title.setStyleSheet(section_title_style(palette, size=18))
-        self.quick_access_preview_frame.setStyleSheet(
-            f"""
-            QFrame#QuickAccessPreview {{
-                background: qlineargradient(x1:0, y1:0, x2:1, y2:1,
-                    stop:0 {palette.surface_alt_bg},
-                    stop:1 {palette.surface_bg});
-                border: 1px solid {palette.border};
-                border-radius: 16px;
-            }}
-            """
-        )
+        self.quick_access_preview_frame.setStyleSheet("")
         for tile in self.quick_access_preview_frame.findChildren(QuickAccessPreviewTile):
             tile.apply_palette(palette)
-        plugin_action_buttons = (
+        for button in (
             self.import_package_button,
             self.import_file_button,
             self.import_folder_button,
@@ -2851,107 +2851,10 @@ class CommandCenterPage(QWidget):
             self.export_all_button,
             self.reset_plugins_button,
             self.refresh_plugins_button,
-        )
-        for button in plugin_action_buttons:
-            button.setStyleSheet(
-                f"""
-                QToolButton {{
-                    background: #ffffff;
-                    color: {palette.text_primary};
-                    border: 1px solid {palette.border};
-                    border-radius: 12px;
-                    padding: 5px 8px;
-                    font-size: 12px;
-                    font-weight: 600;
-                }}
-                QToolButton:hover {{
-                    border-color: {palette.accent};
-                    background: {palette.accent_soft};
-                }}
-                """
-            )
-        for button in self.theme_color_buttons.values():
-            button.setStyleSheet(
-                f"""
-                QToolButton {{
-                    border: 1px solid {palette.border};
-                    border-radius: 14px;
-                    padding: 6px 8px;
-                    background: {palette.surface_alt_bg};
-                    color: {palette.text_primary};
-                    font-weight: 600;
-                }}
-                QToolButton:hover {{
-                    border-color: {palette.accent};
-                    background: {palette.accent_soft};
-                }}
-                QToolButton:checked {{
-                    border: 2px solid {palette.accent};
-                    background: {palette.accent_soft};
-                }}
-                """
-            )
-        for button in self.language_buttons.values():
-            button.setStyleSheet(
-                f"""
-                QToolButton {{
-                    border: 1px solid {palette.border};
-                    border-radius: 14px;
-                    padding: 6px 14px;
-                    background: {palette.surface_alt_bg};
-                    color: {palette.text_primary};
-                    font-weight: 600;
-                }}
-                QToolButton:hover {{
-                    border-color: {palette.accent};
-                    background: {palette.accent_soft};
-                }}
-                QToolButton:checked {{
-                    border: 1px solid {palette.accent};
-                    background: {palette.accent_soft};
-                    color: {palette.text_primary};
-                }}
-                """
-            )
-        self.dark_mode_checkbox.setStyleSheet(
-            f"""
-            QToolButton#DarkModeToggle {{
-                color: {palette.text_primary};
-                font-weight: 600;
-                border: 1px solid {palette.border};
-                border-radius: 14px;
-                padding: 6px 14px;
-                background: {palette.surface_alt_bg};
-            }}
-            QToolButton#DarkModeToggle:hover {{
-                border-color: {palette.accent};
-                background: {palette.accent_soft};
-            }}
-            QToolButton#DarkModeToggle:checked {{
-                border: 1px solid {palette.accent};
-                background: {palette.accent};
-                color: {"#ffffff" if palette.mode == "light" else palette.text_primary};
-            }}
-            """
-        )
+            self.dark_mode_checkbox,
+            *self.theme_color_buttons.values(),
+            *self.language_buttons.values(),
+        ):
+            button.setStyleSheet("")
         for slider in (self.density_slider, self.scaling_slider):
-            slider.setStyleSheet(
-                f"""
-                QSlider::groove:horizontal {{
-                    height: 6px;
-                    border-radius: 3px;
-                    background: {palette.border};
-                }}
-                QSlider::sub-page:horizontal {{
-                    border-radius: 3px;
-                    background: {palette.accent};
-                }}
-                QSlider::handle:horizontal {{
-                    width: 18px;
-                    margin: -6px 0;
-                    border-radius: 9px;
-                    background: {palette.surface_bg};
-                    border: 2px solid {palette.accent};
-                }}
-                """
-            )
+            slider.setStyleSheet("")

@@ -19,8 +19,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, tr
 
 
 SKIP_SUFFIXES = {
@@ -30,9 +30,6 @@ SKIP_SUFFIXES = {
 
 
 def run_credential_scan(context, services, plugin_id: str, target_dir: str):
-    def _pt(key: str, default: str, **kwargs) -> str:
-        return services.plugin_text(plugin_id, key, default, **kwargs)
-
     def _ensure_western(text: str) -> str:
         eastern = "٠١٢٣٤٥٦٧٨٩"
         western = "0123456789"
@@ -52,11 +49,11 @@ def run_credential_scan(context, services, plugin_id: str, target_dir: str):
             file_list.append(os.path.join(root, file_name))
 
     if not file_list:
-        raise ValueError(_pt("error.no_files", "No files found in the selected folder."))
+        raise ValueError(tr(services, plugin_id, "error.no_files", "No files found in the selected folder."))
 
-    context.log(_pt("log.start", "Scanning {count} files for credential exposures...", count=_ensure_western(str(len(file_list)))))
+    context.log(tr(services, plugin_id, "log.start", "Scanning {count} files for credential exposures...", count=_ensure_western(str(len(file_list)))))
     matches: list[str] = []
-    match_label = _pt("match.label", "Match Detected")
+    match_label = tr(services, plugin_id, "match.label", "Match Detected")
     
     for index, path in enumerate(file_list, start=1):
         context.progress(index / float(len(file_list)))
@@ -75,17 +72,17 @@ def run_credential_scan(context, services, plugin_id: str, target_dir: str):
 
     report_path = None
     if matches:
-        report_filename = _pt("report.filename", "Credential_Exposures.txt")
+        report_filename = tr(services, plugin_id, "report.filename", "Credential_Exposures.txt")
         report_path = os.path.join(target_dir, report_filename)
         with open(report_path, "w", encoding="utf-8") as handle:
             handle.write("\n".join(matches))
             handle.write("\n")
         
         matches_count = _ensure_western(str(len(matches)))
-        context.log(_pt("log.matches", "Potential exposures found: {count}", count=matches_count))
-        context.log(_pt("log.save", "Saved report to {path}", path=report_path))
+        context.log(tr(services, plugin_id, "log.matches", "Potential exposures found: {count}", count=matches_count))
+        context.log(tr(services, plugin_id, "log.save", "Saved report to {path}", path=report_path))
     else:
-        context.log(_pt("log.clean", "No credential-like strings detected."))
+        context.log(tr(services, plugin_id, "log.clean", "No credential-like strings detected."))
 
     return {
         "target_dir": target_dir,
@@ -110,13 +107,11 @@ class CredentialScannerPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._latest_report_path = None
         self._build_ui()
         self.services.i18n.language_changed.connect(self._refresh)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         self.main_layout = QVBoxLayout(self)
@@ -124,12 +119,10 @@ class CredentialScannerPage(QWidget):
         self.main_layout.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         self.main_layout.addWidget(self.title_label)
 
         self.desc_label = QLabel()
         self.desc_label.setWordWrap(True)
-        self.desc_label.setStyleSheet("font-size: 14px; color: #43535c;")
         self.main_layout.addWidget(self.desc_label)
 
         path_row = QHBoxLayout()
@@ -170,22 +163,25 @@ class CredentialScannerPage(QWidget):
         self._refresh()
 
     def _refresh(self) -> None:
-        self.title_label.setText(self._pt("title", "Credential Scanner"))
-        self.desc_label.setText(self._pt("description", "A fast static scan for common secret patterns. It skips obvious binary formats and writes a report beside the scanned folder."))
-        self.path_input.setPlaceholderText(self._pt("path.placeholder", "Select a folder to scan..."))
-        self.browse_button.setText(self._pt("browse", "Browse"))
-        self.run_button.setText(self._pt("run.button", "Scan Folder"))
-        self.open_report_button.setText(self._pt("report.button", "Open Report"))
-        self.summary_label.setText(self._pt("summary.initial", "Choose a folder to start a security sweep."))
-        self.output.setPlaceholderText(self._pt("output.placeholder", "Potential matches will appear here."))
+        self.title_label.setText(self.tr("title", "Credential Scanner"))
+        self.desc_label.setText(self.tr("description", "A fast static scan for common secret patterns. It skips obvious binary formats and writes a report beside the scanned folder."))
+        self.path_input.setPlaceholderText(self.tr("path.placeholder", "Select a folder to scan..."))
+        self.browse_button.setText(self.tr("browse", "Browse"))
+        self.run_button.setText(self.tr("run.button", "Scan Folder"))
+        self.open_report_button.setText(self.tr("report.button", "Open Report"))
+        self.summary_label.setText(self.tr("summary.initial", "Choose a folder to start a security sweep."))
+        self.output.setPlaceholderText(self.tr("output.placeholder", "Potential matches will appear here."))
         self._apply_theme_styles()
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.desc_label.setStyleSheet(muted_text_style(palette))
-        self.summary_card.setStyleSheet(card_style(palette, radius=14))
-        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.desc_label,
+            cards=(self.summary_card,),
+            summary_label=self.summary_label,
+        )
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
@@ -193,7 +189,7 @@ class CredentialScannerPage(QWidget):
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
-            self._pt("dialog.browse", "Select Folder To Scan"),
+            self.tr("dialog.browse", "Select Folder To Scan"),
             str(self.services.default_output_path()),
         )
         if folder:
@@ -204,22 +200,22 @@ class CredentialScannerPage(QWidget):
         if not target_dir:
             QMessageBox.warning(
                 self, 
-                self._pt("dialog.missing.title", "Missing Input"), 
-                self._pt("dialog.missing.body", "Choose a folder to scan.")
+                self.tr("dialog.missing.title", "Missing Input"), 
+                self.tr("dialog.missing.body", "Choose a folder to scan.")
             )
             return
 
         self.run_button.setEnabled(False)
         self.open_report_button.setEnabled(False)
         self.output.setPlainText("")
-        self.summary_label.setText(self._pt("summary.running", "Scanning folder..."))
+        self.summary_label.setText(self.tr("summary.running", "Scanning folder..."))
 
         self.services.run_task(
             lambda context: run_credential_scan(context, self.services, self.plugin_id, target_dir),
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,
-            status_text=self._pt("summary.running", "Scanning folder..."),
+            status_text=self.tr("summary.running", "Scanning folder..."),
         )
 
     def _handle_result(self, payload: object) -> None:
@@ -237,25 +233,25 @@ class CredentialScannerPage(QWidget):
             preview = "\n".join(result["matches"][:200])
             self.output.setPlainText(preview)
             self.summary_label.setText(
-                self._pt("summary.done", "Scanned {count} files and found {matches} potential matches.", count=scanned_count_str, matches=matches_count_str)
+                self.tr("summary.done", "Scanned {count} files and found {matches} potential matches.", count=scanned_count_str, matches=matches_count_str)
             )
             self.open_report_button.setEnabled(True)
             self.services.record_run(
                 self.plugin_id,
                 "WARNING",
-                self._pt("summary.done", "Detected {matches} potential exposures in {dir}", matches=matches_count_str, dir=result['target_dir']),
+                self.tr("summary.done", "Detected {matches} potential exposures in {dir}", matches=matches_count_str, dir=result['target_dir']),
             )
         else:
-            self.output.setPlainText(self._pt("log.clean", "No credential-like strings detected."))
-            self.summary_label.setText(self._pt("summary.clean", "Scanned {count} files with no matches.", count=scanned_count_str))
-            self.services.record_run(self.plugin_id, "SUCCESS", self._pt("summary.clean", "Clean scan for {dir}", dir=result['target_dir'], count=scanned_count_str))
+            self.output.setPlainText(self.tr("log.clean", "No credential-like strings detected."))
+            self.summary_label.setText(self.tr("summary.clean", "Scanned {count} files with no matches.", count=scanned_count_str))
+            self.services.record_run(self.plugin_id, "SUCCESS", self.tr("summary.clean", "Clean scan for {dir}", dir=result['target_dir'], count=scanned_count_str))
 
     def _handle_error(self, payload: object) -> None:
         message = payload.get("message", "Unknown scanner error") if isinstance(payload, dict) else str(payload)
         self.output.setPlainText(message)
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.failed", "Credential scan failed."), "ERROR")
+        self.services.log(self.tr("log.failed", "Credential scan failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)

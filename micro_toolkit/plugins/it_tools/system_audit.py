@@ -21,24 +21,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from micro_toolkit.core.plugin_api import QtPlugin
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style, section_title_style
-
-
-def _tr(translate, key: str, default: str, **kwargs) -> str:
-    if callable(translate):
-        try:
-            return translate(key, default, **kwargs)
-        except Exception:
-            pass
-    text = default
-    if kwargs:
-        try:
-            text = text.format(**kwargs)
-        except Exception:
-            pass
-    return text
-
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, safe_tr
+from micro_toolkit.core.page_style import apply_page_chrome, muted_text_style, page_title_style, section_title_style
 
 def collect_system_audit_payload(*, translate=None) -> dict[str, object]:
     root_disk_path = Path.home().anchor or "/"
@@ -53,7 +37,7 @@ def collect_system_audit_payload(*, translate=None) -> dict[str, object]:
         "system": f"{platform.system()} {platform.release()}",
         "hostname": platform.node(),
         "architecture": platform.machine(),
-        "processor": platform.processor() or platform.machine() or _tr(translate, "status.unknown", "Unknown"),
+        "processor": platform.processor() or platform.machine() or safe_tr(translate, "status.unknown", "Unknown"),
         "physical_cpus": psutil.cpu_count(logical=False) or 0,
         "logical_cpus": psutil.cpu_count(logical=True) or 0,
         "cpu_frequency_mhz": round(cpu_freq.current, 0) if cpu_freq is not None else None,
@@ -72,14 +56,14 @@ def collect_system_audit_payload(*, translate=None) -> dict[str, object]:
     }
 
 
-def gather_system_audit(context) -> dict[str, object]:
-    translate = getattr(context, "translate", None)
-    context.log(_tr(translate, "log.start", "Collecting system overview details..."))
+def gather_system_audit(context, *, translate=None) -> dict[str, object]:
+    translate = translate or getattr(context, "translate", None)
+    context.log(safe_tr(translate, "log.start", "Collecting system overview details..."))
     context.progress(0.12)
     context.progress(0.42)
     payload = collect_system_audit_payload(translate=translate)
     context.progress(1.0)
-    context.log(_tr(translate, "log.done", "System overview audit complete."))
+    context.log(safe_tr(translate, "log.done", "System overview audit complete."))
     return payload
 
 
@@ -110,11 +94,9 @@ class MetricDonut(QFrame):
         layout = QVBoxLayout(self)
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(6)
-        self.title_label.setStyleSheet("font-size: 16px; font-weight: 700;")
         layout.addWidget(self.title_label)
         layout.addWidget(self.chart_view, 0, Qt.AlignmentFlag.AlignCenter)
         self.value_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.value_label.setStyleSheet("font-size: 26px; font-weight: 800;")
         layout.addWidget(self.value_label)
         self.caption_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.caption_label.setWordWrap(True)
@@ -156,7 +138,9 @@ class SystemAuditPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._audit_payload: dict[str, object] = {}
+        self._audit_running = False
         self._timer = QTimer(self)
         self._timer.setInterval(2500)
         self._timer.timeout.connect(self._refresh_live_metrics)
@@ -167,9 +151,6 @@ class SystemAuditPage(QWidget):
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
         self.services.i18n.language_changed.connect(self._handle_language_change)
         self._run_audit()
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
@@ -182,7 +163,6 @@ class SystemAuditPage(QWidget):
         hero_layout.setSpacing(8)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 30px; font-weight: 800;")
         hero_layout.addWidget(self.title_label)
 
         self.subtitle_label = QLabel()
@@ -196,7 +176,6 @@ class SystemAuditPage(QWidget):
         controls.addWidget(self.refresh_button, 0, Qt.AlignmentFlag.AlignLeft)
 
         self.timestamp_label = QLabel("--")
-        self.timestamp_label.setStyleSheet("font-weight: 600;")
         controls.addWidget(self.timestamp_label, 0, Qt.AlignmentFlag.AlignVCenter)
         controls.addStretch(1)
 
@@ -230,7 +209,6 @@ class SystemAuditPage(QWidget):
         details_layout.setContentsMargins(18, 16, 18, 16)
         details_layout.setSpacing(10)
         self.details_heading = QLabel()
-        self.details_heading.setStyleSheet("font-size: 18px; font-weight: 700;")
         details_layout.addWidget(self.details_heading)
 
         self.details_table = QTableWidget(0, 2)
@@ -248,10 +226,8 @@ class SystemAuditPage(QWidget):
         layout.setContentsMargins(18, 16, 18, 16)
         layout.setSpacing(8)
         title = QLabel(heading)
-        title.setStyleSheet("font-size: 18px; font-weight: 700;")
         body = QLabel("")
         body.setWordWrap(True)
-        body.setStyleSheet("line-height: 1.35;")
         layout.addWidget(title)
         layout.addWidget(body)
         layout.addStretch(1)
@@ -260,14 +236,18 @@ class SystemAuditPage(QWidget):
         return card
 
     def _run_audit(self) -> None:
+        if self._audit_running:
+            return
+        self._audit_running = True
+        self._timer.stop()
         self.refresh_button.setEnabled(False)
-        self.services.log(self._pt("log.refresh", "Refreshing system overview."))
+        self.services.log(self.tr("log.refresh", "Refreshing system overview."))
         self.services.run_task(
-            lambda context: collect_system_audit_payload(translate=self._pt),
+            lambda context: gather_system_audit(context, translate=self.tr),
             on_result=self._handle_audit_result,
             on_error=self._handle_audit_error,
             on_finished=self._finish_audit_refresh,
-            status_text=self._pt("log.refresh", "Refreshing system overview."),
+            status_text=self.tr("log.refresh", "Refreshing system overview."),
         )
 
     def _handle_audit_result(self, payload: object) -> None:
@@ -275,15 +255,16 @@ class SystemAuditPage(QWidget):
         self._apply_audit_payload()
         self._refresh_live_metrics()
         self.services.record_run(self.plugin_id, "SUCCESS", "Updated system overview")
-        self.services.log(self._pt("log.success", "System overview refreshed successfully."))
+        self.services.log(self.tr("log.success", "System overview refreshed successfully."))
 
     def _handle_audit_error(self, payload: object) -> None:
-        message = payload.get("message", self._pt("log.failed", "System overview refresh failed.")) if isinstance(payload, dict) else str(payload)
+        message = payload.get("message", self.tr("log.failed", "System overview refresh failed.")) if isinstance(payload, dict) else str(payload)
         self.timestamp_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.failed", "System overview refresh failed."), "ERROR")
+        self.services.log(self.tr("log.failed", "System overview refresh failed."), "ERROR")
 
     def _finish_audit_refresh(self) -> None:
+        self._audit_running = False
         self.refresh_button.setEnabled(True)
         self._timer.start()
 
@@ -291,14 +272,14 @@ class SystemAuditPage(QWidget):
         data = self._audit_payload
         self._set_detail_card(
             self.profile_card,
-            self._pt("card.hardware.title", "Hardware"),
+            self.tr("card.hardware.title", "Hardware"),
             [
-                (self._pt("card.hardware.host", "Host"), data.get("hostname", "--")),
-                (self._pt("card.hardware.proc", "Processor"), data.get("processor", "--")),
-                (self._pt("card.hardware.arch", "Architecture"), data.get("architecture", "--")),
+                (self.tr("card.hardware.host", "Host"), data.get("hostname", "--")),
+                (self.tr("card.hardware.proc", "Processor"), data.get("processor", "--")),
+                (self.tr("card.hardware.arch", "Architecture"), data.get("architecture", "--")),
                 (
-                    self._pt("card.hardware.cores", "Cores"),
-                    self._pt(
+                    self.tr("card.hardware.cores", "Cores"),
+                    self.tr(
                         "card.hardware.cores_val",
                         "{physical} physical / {logical} logical",
                         physical=data.get("physical_cpus", 0),
@@ -309,14 +290,14 @@ class SystemAuditPage(QWidget):
         )
         self._set_detail_card(
             self.runtime_card,
-            self._pt("card.runtime.title", "Runtime"),
+            self.tr("card.runtime.title", "Runtime"),
             [
-                (self._pt("card.runtime.system", "System"), data.get("system", "--")),
-                (self._pt("card.runtime.python", "Python"), data.get("python_version", "--")),
-                (self._pt("card.runtime.booted", "Booted"), data.get("booted_at", "--")),
+                (self.tr("card.runtime.system", "System"), data.get("system", "--")),
+                (self.tr("card.runtime.python", "Python"), data.get("python_version", "--")),
+                (self.tr("card.runtime.booted", "Booted"), data.get("booted_at", "--")),
                 (
-                    self._pt("card.runtime.uptime", "Uptime"),
-                    self._pt("card.runtime.hours", "{count} hours", count=data.get("uptime_hours", 0)),
+                    self.tr("card.runtime.uptime", "Uptime"),
+                    self.tr("card.runtime.hours", "{count} hours", count=data.get("uptime_hours", 0)),
                 ),
             ],
         )
@@ -327,39 +308,39 @@ class SystemAuditPage(QWidget):
             battery_text = f"{battery_pct:.0f}% ({plugged})"
         self._set_detail_card(
             self.health_card,
-            self._pt("card.health.title", "Health"),
+            self.tr("card.health.title", "Health"),
             [
-                (self._pt("card.health.mem", "Memory total"), self._fmt_optional(data.get("memory_total_gb"), self._pt("unit.gb", "GB"))),
-                (self._pt("card.health.disk", "Disk total"), self._fmt_optional(data.get("disk_total_gb"), self._pt("unit.gb", "GB"))),
-                (self._pt("card.health.net", "Network sent"), self._fmt_optional(data.get("network_sent_gb"), self._pt("unit.gb", "GB"))),
-                (self._pt("card.health.battery", "Battery"), battery_text),
+                (self.tr("card.health.mem", "Memory total"), self._fmt_optional(data.get("memory_total_gb"), self.tr("unit.gb", "GB"))),
+                (self.tr("card.health.disk", "Disk total"), self._fmt_optional(data.get("disk_total_gb"), self.tr("unit.gb", "GB"))),
+                (self.tr("card.health.net", "Network sent"), self._fmt_optional(data.get("network_sent_gb"), self.tr("unit.gb", "GB"))),
+                (self.tr("card.health.battery", "Battery"), battery_text),
             ],
         )
 
         rows = [
-            (self._pt("row.hostname", "Hostname"), data.get("hostname", "--")),
-            (self._pt("row.os", "Operating system"), data.get("system", "--")),
-            (self._pt("row.arch", "Architecture"), data.get("architecture", "--")),
-            (self._pt("row.proc", "Processor"), data.get("processor", "--")),
-            (self._pt("row.cpu_freq", "CPU frequency"), self._fmt_optional(data.get("cpu_frequency_mhz"), self._pt("unit.mhz", "MHz"))),
-            (self._pt("row.phys_cpus", "Physical CPUs"), str(data.get("physical_cpus", "--"))),
-            (self._pt("row.log_cpus", "Logical CPUs"), str(data.get("logical_cpus", "--"))),
-            (self._pt("row.mem_total", "Memory total"), self._fmt_optional(data.get("memory_total_gb"), self._pt("unit.gb", "GB"))),
-            (self._pt("row.mem_avail", "Memory available"), self._fmt_optional(data.get("memory_available_gb"), self._pt("unit.gb", "GB"))),
-            (self._pt("row.disk_total", "Disk total"), self._fmt_optional(data.get("disk_total_gb"), self._pt("unit.gb", "GB"))),
-            (self._pt("row.disk_free", "Disk free"), self._fmt_optional(data.get("disk_free_gb"), self._pt("unit.gb", "GB"))),
-            (self._pt("row.disk_used", "Disk used"), self._fmt_optional(data.get("disk_used_pct"), self._pt("unit.pct", "%"))),
-            (self._pt("row.python", "Python"), data.get("python_version", "--")),
-            (self._pt("row.booted", "Booted at"), data.get("booted_at", "--")),
-            (self._pt("row.uptime", "Uptime"), self._pt("card.runtime.hours", "{count} hours", count=data.get("uptime_hours", 0))),
-            (self._pt("row.net_sent", "Network sent"), self._fmt_optional(data.get("network_sent_gb"), self._pt("unit.gb", "GB"))),
-            (self._pt("row.net_recv", "Network received"), self._fmt_optional(data.get("network_recv_gb"), self._pt("unit.gb", "GB"))),
+            (self.tr("row.hostname", "Hostname"), data.get("hostname", "--")),
+            (self.tr("row.os", "Operating system"), data.get("system", "--")),
+            (self.tr("row.arch", "Architecture"), data.get("architecture", "--")),
+            (self.tr("row.proc", "Processor"), data.get("processor", "--")),
+            (self.tr("row.cpu_freq", "CPU frequency"), self._fmt_optional(data.get("cpu_frequency_mhz"), self.tr("unit.mhz", "MHz"))),
+            (self.tr("row.phys_cpus", "Physical CPUs"), str(data.get("physical_cpus", "--"))),
+            (self.tr("row.log_cpus", "Logical CPUs"), str(data.get("logical_cpus", "--"))),
+            (self.tr("row.mem_total", "Memory total"), self._fmt_optional(data.get("memory_total_gb"), self.tr("unit.gb", "GB"))),
+            (self.tr("row.mem_avail", "Memory available"), self._fmt_optional(data.get("memory_available_gb"), self.tr("unit.gb", "GB"))),
+            (self.tr("row.disk_total", "Disk total"), self._fmt_optional(data.get("disk_total_gb"), self.tr("unit.gb", "GB"))),
+            (self.tr("row.disk_free", "Disk free"), self._fmt_optional(data.get("disk_free_gb"), self.tr("unit.gb", "GB"))),
+            (self.tr("row.disk_used", "Disk used"), self._fmt_optional(data.get("disk_used_pct"), self.tr("unit.pct", "%"))),
+            (self.tr("row.python", "Python"), data.get("python_version", "--")),
+            (self.tr("row.booted", "Booted at"), data.get("booted_at", "--")),
+            (self.tr("row.uptime", "Uptime"), self.tr("card.runtime.hours", "{count} hours", count=data.get("uptime_hours", 0))),
+            (self.tr("row.net_sent", "Network sent"), self._fmt_optional(data.get("network_sent_gb"), self.tr("unit.gb", "GB"))),
+            (self.tr("row.net_recv", "Network received"), self._fmt_optional(data.get("network_recv_gb"), self.tr("unit.gb", "GB"))),
         ]
         self.details_table.setRowCount(len(rows))
         self.details_table.setHorizontalHeaderLabels(
             [
-                self._pt("table.header.metric", "Metric"),
-                self._pt("table.header.value", "Value"),
+                self.tr("table.header.metric", "Metric"),
+                self.tr("table.header.value", "Value"),
             ]
         )
         for row, (label, value) in enumerate(rows):
@@ -373,40 +354,41 @@ class SystemAuditPage(QWidget):
         disk = psutil.disk_usage(Path.home().anchor or "/")
         self.cpu_donut.set_metric(
             cpu_pct,
-            caption=self._pt("cpu.caption", "{count} threads active", count=psutil.cpu_count(logical=True) or 0),
+            caption=self.tr("cpu.caption", "{count} threads active", count=psutil.cpu_count(logical=True) or 0),
             accent=palette.accent,
             remainder=palette.border,
         )
         self.memory_donut.set_metric(
             memory.percent,
-            caption=self._pt("memory.caption", "{count} GB available", count=f"{memory.available / (1024**3):.1f}"),
+            caption=self.tr("memory.caption", "{count} GB available", count=f"{memory.available / (1024**3):.1f}"),
             accent="#d66b57" if palette.mode == "dark" else "#b63f26",
             remainder=palette.border,
         )
         self.disk_donut.set_metric(
             disk.percent,
-            caption=self._pt("disk.caption", "{count} GB free", count=f"{disk.free / (1024**3):.1f}"),
+            caption=self.tr("disk.caption", "{count} GB free", count=f"{disk.free / (1024**3):.1f}"),
             accent="#7fbc41" if palette.mode == "dark" else "#2f7d4d",
             remainder=palette.border,
         )
-        self.timestamp_label.setText(self._pt("timestamp", "Updated {time}", time=datetime.now().strftime("%H:%M:%S")))
+        self.timestamp_label.setText(self.tr("timestamp", "Updated {time}", time=datetime.now().strftime("%H:%M:%S")))
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        shared_card_style = card_style(palette)
-        for frame in (
-            self.hero_card,
-            self.cpu_donut,
-            self.memory_donut,
-            self.disk_donut,
-            self.profile_card,
-            self.runtime_card,
-            self.health_card,
-            self.details_card,
-        ):
-            frame.setStyleSheet(shared_card_style)
-        self.title_label.setStyleSheet(page_title_style(palette))
-        self.subtitle_label.setStyleSheet(muted_text_style(palette))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.subtitle_label,
+            cards=(
+                self.hero_card,
+                self.cpu_donut,
+                self.memory_donut,
+                self.disk_donut,
+                self.profile_card,
+                self.runtime_card,
+                self.health_card,
+                self.details_card,
+            ),
+        )
         self.timestamp_label.setStyleSheet(muted_text_style(palette, weight=600, extra=""))
         self.details_heading.setStyleSheet(section_title_style(palette))
 
@@ -432,18 +414,18 @@ class SystemAuditPage(QWidget):
             self._refresh_live_metrics()
 
     def _apply_texts(self) -> None:
-        self.title_label.setText(self._pt("title", "System Overview"))
+        self.title_label.setText(self.tr("title", "System Overview"))
         self.subtitle_label.setText(
-            self._pt(
+            self.tr(
                 "description",
                 "Monitor live resource usage, hardware profile, runtime details, and local system health from one place.",
             )
         )
-        self.refresh_button.setText(self._pt("refresh", "Refresh overview"))
-        self.cpu_donut.set_title(self._pt("cpu.title", "CPU"))
-        self.memory_donut.set_title(self._pt("memory.title", "Memory"))
-        self.disk_donut.set_title(self._pt("disk.title", "Disk"))
-        self.details_heading.setText(self._pt("table.heading", "System details"))
+        self.refresh_button.setText(self.tr("refresh", "Refresh overview"))
+        self.cpu_donut.set_title(self.tr("cpu.title", "CPU"))
+        self.memory_donut.set_title(self.tr("memory.title", "Memory"))
+        self.disk_donut.set_title(self.tr("disk.title", "Disk"))
+        self.details_heading.setText(self.tr("table.heading", "System details"))
 
     @staticmethod
     def _set_detail_card(card: QFrame, title: str, rows: list[tuple[str, object]]) -> None:
@@ -457,4 +439,4 @@ class SystemAuditPage(QWidget):
         return f"{value} {suffix}"
 
     def _tr_bool(self, value: bool) -> str:
-        return self._pt("status.plugged", "plugged in") if value else self._pt("status.battery", "battery")
+        return self.tr("status.plugged", "plugged in") if value else self.tr("status.battery", "battery")

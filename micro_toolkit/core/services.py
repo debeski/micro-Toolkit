@@ -81,6 +81,25 @@ class AppLogger(QObject):
         return list(self._history)
 
 
+class _ShellTaskBridge(QObject):
+    def __init__(self, services: "AppServices", task_id: int):
+        super().__init__(services)
+        self._services = services
+        self._task_id = task_id
+
+    @Slot(float)
+    def handle_progress(self, value: float) -> None:
+        self._services._update_shell_task_progress(self._task_id, value)
+
+    @Slot()
+    def handle_finished(self) -> None:
+        self._services._finish_shell_task_progress(self._task_id)
+
+    @Slot(object)
+    def handle_finished_payload(self, _payload: object) -> None:
+        self._services._finish_shell_task_progress(self._task_id)
+
+
 class AppServices(QObject):
     quick_access_changed = Signal()
     plugin_visuals_changed = Signal(str)
@@ -721,6 +740,13 @@ class AppServices(QObject):
         worker = Worker(task_fn)
         shell_task_id = self._start_shell_task_progress(status_text)
         worker.signals.log.connect(self.logger.log)
+        if shell_task_id is not None:
+            shell_task_bridge = _ShellTaskBridge(self, shell_task_id)
+            worker._shell_task_bridge = shell_task_bridge
+            worker.signals.progress.connect(shell_task_bridge.handle_progress)
+            worker.signals.result.connect(shell_task_bridge.handle_finished_payload)
+            worker.signals.error.connect(shell_task_bridge.handle_finished_payload)
+            worker.signals.finished.connect(shell_task_bridge.handle_finished)
         if on_result is not None:
             worker.signals.result.connect(on_result)
         if on_error is not None:
@@ -731,13 +757,6 @@ class AppServices(QObject):
             worker.signals.finished.connect(on_finished)
         if on_progress is not None:
             worker.signals.progress.connect(on_progress)
-        if shell_task_id is not None:
-            worker.signals.progress.connect(
-                lambda value, task_id=shell_task_id: self._update_shell_task_progress(task_id, value)
-            )
-            worker.signals.finished.connect(
-                lambda task_id=shell_task_id: self._finish_shell_task_progress(task_id)
-            )
         self.thread_pool.start(worker)
         return worker
 

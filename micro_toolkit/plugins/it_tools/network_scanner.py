@@ -18,8 +18,8 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, tr
 
 
 def parse_ports(port_expression: str) -> list[int]:
@@ -42,9 +42,6 @@ def parse_ports(port_expression: str) -> list[int]:
 
 
 def run_network_scan(context, services, plugin_id: str, target_host: str, port_expression: str, timeout_seconds: float, output_dir: Path):
-    def _pt(key: str, default: str, **kwargs) -> str:
-        return services.plugin_text(plugin_id, key, default, **kwargs)
-
     def _ensure_western(text: str) -> str:
         eastern = "٠١٢٣٤٥٦٧٨٩"
         western = "0123456789"
@@ -52,7 +49,7 @@ def run_network_scan(context, services, plugin_id: str, target_host: str, port_e
         return text.translate(trans)
 
     ports = parse_ports(port_expression)
-    context.log(_pt("log.start", "Scanning {host} across {count} ports...", host=target_host, count=_ensure_western(str(len(ports)))))
+    context.log(tr(services, plugin_id, "log.start", "Scanning {host} across {count} ports...", host=target_host, count=_ensure_western(str(len(ports)))))
     open_ports: list[int] = []
 
     for index, port in enumerate(ports, start=1):
@@ -62,25 +59,25 @@ def run_network_scan(context, services, plugin_id: str, target_host: str, port_e
             result = sock.connect_ex((target_host, port))
             if result == 0:
                 open_ports.append(port)
-                context.log(_pt("log.detect", "Open port detected: {port}", port=_ensure_western(str(port))))
+                context.log(tr(services, plugin_id, "log.detect", "Open port detected: {port}", port=_ensure_western(str(port))))
 
     output_dir.mkdir(parents=True, exist_ok=True)
     safe_host = re.sub(r"[^A-Za-z0-9_.-]+", "_", target_host)
     
-    report_filename = _pt("report.filename", "network_scan_{host}.txt", host=safe_host)
+    report_filename = tr(services, plugin_id, "report.filename", "network_scan_{host}.txt", host=safe_host)
     report_path = output_dir / report_filename
     
     with open(report_path, "w", encoding="utf-8") as handle:
-        handle.write(_pt("report.target", "Target: {host}", host=target_host) + "\n")
-        handle.write(_pt("report.count", "Ports scanned: {count}", count=_ensure_western(str(len(ports)))) + "\n")
-        handle.write(_pt("report.heading", "Open ports:") + "\n")
+        handle.write(tr(services, plugin_id, "report.target", "Target: {host}", host=target_host) + "\n")
+        handle.write(tr(services, plugin_id, "report.count", "Ports scanned: {count}", count=_ensure_western(str(len(ports)))) + "\n")
+        handle.write(tr(services, plugin_id, "report.heading", "Open ports:") + "\n")
         if open_ports:
             for port in open_ports:
                 handle.write(_ensure_western(str(port)) + "\n")
         else:
-            handle.write(_pt("report.none", "(none)") + "\n")
+            handle.write(tr(services, plugin_id, "report.none", "(none)") + "\n")
 
-    context.log(_pt("log.done", "Scan complete. Report saved to {path}", path=str(report_path)))
+    context.log(tr(services, plugin_id, "log.done", "Scan complete. Report saved to {path}", path=str(report_path)))
     return {
         "target_host": target_host,
         "open_ports": open_ports,
@@ -104,13 +101,11 @@ class NetworkScannerPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._latest_report_path = None
         self._build_ui()
         self.services.i18n.language_changed.connect(self._refresh)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         self.main_layout = QVBoxLayout(self)
@@ -118,12 +113,10 @@ class NetworkScannerPage(QWidget):
         self.main_layout.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         self.main_layout.addWidget(self.title_label)
 
         self.desc_label = QLabel()
         self.desc_label.setWordWrap(True)
-        self.desc_label.setStyleSheet("font-size: 14px; color: #43535c;")
         self.main_layout.addWidget(self.desc_label)
 
         host_row = QHBoxLayout()
@@ -181,24 +174,27 @@ class NetworkScannerPage(QWidget):
         self._refresh()
 
     def _refresh(self) -> None:
-        self.title_label.setText(self._pt("title", "Network Port Scanner"))
-        self.desc_label.setText(self._pt("description", "Enter a host and a port list such as `80,443,8080` or `1-1024`. The scan runs in the background and writes a report under your configured output path."))
-        self.host_label_widget.setText(self._pt("host.label", "Target Host"))
-        self.ports_label_widget.setText(self._pt("ports.label", "Ports"))
-        self.timeout_label_widget.setText(self._pt("timeout.label", "Timeout"))
-        self.timeout_input.setPlaceholderText(self._pt("timeout.placeholder", "Seconds per port"))
-        self.run_button.setText(self._pt("run.button", "Run Scan"))
-        self.open_report_button.setText(self._pt("report.button", "Open Report"))
-        self.summary_label.setText(self._pt("summary.initial", "Ready to scan."))
-        self.output.setPlaceholderText(self._pt("output.placeholder", "Open ports will appear here."))
+        self.title_label.setText(self.tr("title", "Network Port Scanner"))
+        self.desc_label.setText(self.tr("description", "Enter a host and a port list such as `80,443,8080` or `1-1024`. The scan runs in the background and writes a report under your configured output path."))
+        self.host_label_widget.setText(self.tr("host.label", "Target Host"))
+        self.ports_label_widget.setText(self.tr("ports.label", "Ports"))
+        self.timeout_label_widget.setText(self.tr("timeout.label", "Timeout"))
+        self.timeout_input.setPlaceholderText(self.tr("timeout.placeholder", "Seconds per port"))
+        self.run_button.setText(self.tr("run.button", "Run Scan"))
+        self.open_report_button.setText(self.tr("report.button", "Open Report"))
+        self.summary_label.setText(self.tr("summary.initial", "Ready to scan."))
+        self.output.setPlaceholderText(self.tr("output.placeholder", "Open ports will appear here."))
         self._apply_theme_styles()
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.desc_label.setStyleSheet(muted_text_style(palette))
-        self.summary_card.setStyleSheet(card_style(palette, radius=14))
-        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.desc_label,
+            cards=(self.summary_card,),
+            summary_label=self.summary_label,
+        )
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
@@ -210,8 +206,8 @@ class NetworkScannerPage(QWidget):
         if not host or not port_expression:
             QMessageBox.warning(
                 self, 
-                self._pt("dialog.missing.title", "Missing Input"), 
-                self._pt("dialog.missing.body", "Enter a host and at least one port.")
+                self.tr("dialog.missing.title", "Missing Input"), 
+                self.tr("dialog.missing.body", "Enter a host and at least one port.")
             )
             return
 
@@ -220,15 +216,15 @@ class NetworkScannerPage(QWidget):
         except ValueError:
             QMessageBox.warning(
                 self, 
-                self._pt("dialog.invalid_timeout.title", "Invalid Timeout"), 
-                self._pt("dialog.invalid_timeout.body", "Timeout must be a numeric value in seconds.")
+                self.tr("dialog.invalid_timeout.title", "Invalid Timeout"), 
+                self.tr("dialog.invalid_timeout.body", "Timeout must be a numeric value in seconds.")
             )
             return
 
         self.run_button.setEnabled(False)
         self.open_report_button.setEnabled(False)
         self.output.setPlainText("")
-        self.summary_label.setText(self._pt("summary.running", "Scanning target..."))
+        self.summary_label.setText(self.tr("summary.running", "Scanning target..."))
 
         report_dir = self.services.default_output_path() / "network_scans"
         self.services.run_task(
@@ -253,22 +249,22 @@ class NetworkScannerPage(QWidget):
         if open_ports:
             self.output.setPlainText("\n".join(str(port).translate(trans) for port in open_ports))
             self.summary_label.setText(
-                self._pt("summary.done", "Scanned {count} ports on {host} and found {open} open ports.", count=ports_scanned_str, host=result['target_host'], open=open_count_str)
+                self.tr("summary.done", "Scanned {count} ports on {host} and found {open} open ports.", count=ports_scanned_str, host=result['target_host'], open=open_count_str)
             )
             self.services.record_run(
                 self.plugin_id,
                 "SUCCESS",
-                self._pt("summary.done", "Found {open} open ports on {host}", open=open_count_str, host=result['target_host']),
+                self.tr("summary.done", "Found {open} open ports on {host}", open=open_count_str, host=result['target_host']),
             )
         else:
-            self.output.setPlainText(self._pt("output.no_open", "No open ports found."))
+            self.output.setPlainText(self.tr("output.no_open", "No open ports found."))
             self.summary_label.setText(
-                self._pt("summary.no_open", "Scanned {count} ports on {host} with no open ports.", count=ports_scanned_str, host=result['target_host'])
+                self.tr("summary.no_open", "Scanned {count} ports on {host} with no open ports.", count=ports_scanned_str, host=result['target_host'])
             )
             self.services.record_run(
                 self.plugin_id,
                 "WARNING",
-                self._pt("summary.no_open", "No open ports found on {host}", host=result['target_host']),
+                self.tr("summary.no_open", "No open ports found on {host}", host=result['target_host']),
             )
         self.open_report_button.setEnabled(True)
 
@@ -277,7 +273,7 @@ class NetworkScannerPage(QWidget):
         self.output.setPlainText(message)
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.failed", "Network scan failed."), "ERROR")
+        self.services.log(self.tr("log.failed", "Network scan failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)

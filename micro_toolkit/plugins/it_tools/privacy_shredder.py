@@ -22,13 +22,11 @@ from PySide6.QtWidgets import (
     QListWidget,
 )
 
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome, section_title_style
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, tr
 
 
 def run_shred_task(context, services, plugin_id: str, paths: list[Path], passes: int):
-    def _pt(key: str, default: str, **kwargs) -> str:
-        return services.plugin_text(plugin_id, key, default, **kwargs)
-
     def _ensure_western(text: str) -> str:
         eastern = "٠١٢٣٤٥٦٧٨٩"
         western = "0123456789"
@@ -36,14 +34,14 @@ def run_shred_task(context, services, plugin_id: str, paths: list[Path], passes:
         return text.translate(trans)
 
     total = len(paths)
-    context.log(_pt("log.start", "Starting secure shredding of {count} items with {passes} passes...", count=_ensure_western(str(total)), passes=_ensure_western(str(passes))))
+    context.log(tr(services, plugin_id, "log.start", "Starting secure shredding of {count} items with {passes} passes...", count=_ensure_western(str(total)), passes=_ensure_western(str(passes))))
     
     for i, path in enumerate(paths, 1):
         if not path.exists():
-            context.log(_pt("log.not_found", "Skipping non-existent path: {path}", path=str(path)), "WARNING")
+            context.log(tr(services, plugin_id, "log.not_found", "Skipping non-existent path: {path}", path=str(path)), "WARNING")
             continue
             
-        context.log(_pt("log.shredding", "Shredding: {name}", name=path.name))
+        context.log(tr(services, plugin_id, "log.shredding", "Shredding: {name}", name=path.name))
         try:
             if path.is_file():
                 length = path.stat().st_size
@@ -56,13 +54,13 @@ def run_shred_task(context, services, plugin_id: str, paths: list[Path], passes:
                 path.unlink()
             elif path.is_dir():
                 shutil.rmtree(path)
-            context.log(_pt("log.success", "Permanently deleted: {name}", name=path.name))
+            context.log(tr(services, plugin_id, "log.success", "Permanently deleted: {name}", name=path.name))
         except Exception as e:
-            context.log(_pt("log.error", "Failed to shred {name}: {error}", name=path.name, error=str(e)), "ERROR")
+            context.log(tr(services, plugin_id, "log.error", "Failed to shred {name}: {error}", name=path.name, error=str(e)), "ERROR")
             
         context.progress(i / total)
 
-    context.log(_pt("log.done", "Privacy shredding operation complete."))
+    context.log(tr(services, plugin_id, "log.done", "Privacy shredding operation complete."))
     return {"shredded_count": _ensure_western(str(total))}
 
 
@@ -81,12 +79,12 @@ class PrivacyShredderPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._paths: list[Path] = []
         self._build_ui()
-        self.services.i18n.language_changed.connect(self._refresh)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
+        self._apply_texts()
+        self.services.i18n.language_changed.connect(self._apply_texts)
+        self.services.theme_manager.theme_changed.connect(self._apply_theme_styles)
 
     def _build_ui(self) -> None:
         self.main_layout = QVBoxLayout(self)
@@ -94,17 +92,14 @@ class PrivacyShredderPage(QWidget):
         self.main_layout.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #b71c1c;")
         self.main_layout.addWidget(self.title_label)
 
         self.desc_label = QLabel()
         self.desc_label.setWordWrap(True)
-        self.desc_label.setStyleSheet("font-size: 14px; color: #43535c;")
         self.main_layout.addWidget(self.desc_label)
 
         list_header = QHBoxLayout()
         self.queue_label = QLabel()
-        self.queue_label.setStyleSheet("font-weight: 600; color: #10232c;")
         list_header.addWidget(self.queue_label)
         list_header.addStretch()
         
@@ -136,7 +131,6 @@ class PrivacyShredderPage(QWidget):
 
         controls = QHBoxLayout()
         self.run_button = QPushButton()
-        self.run_button.setStyleSheet("background-color: #d32f2f; color: white; font-weight: bold; padding: 8px 16px;")
         self.run_button.clicked.connect(self._run)
         controls.addWidget(self.run_button)
 
@@ -146,21 +140,31 @@ class PrivacyShredderPage(QWidget):
         self.output.setReadOnly(True)
         self.main_layout.addWidget(self.output, 1)
         
-        self._refresh()
+    def _apply_texts(self) -> None:
+        self.title_label.setText(self.tr("title", "Privacy Shredder"))
+        self.desc_label.setText(self.tr("description", "Permanently destroy sensitive files. Warning: Data deleted this way cannot be recovered even with specialized forensics software."))
+        self.queue_label.setText(self.tr("queue.label", "Shredding Queue"))
+        self.add_file_btn.setText(self.tr("button.add_files", "Add Files"))
+        self.add_dir_btn.setText(self.tr("button.add_folder", "Add Folder"))
+        self.clear_btn.setText(self.tr("button.clear", "Clear"))
+        self.passes_label_widget.setText(self.tr("passes.label", "Overwriting Passes:"))
+        self.run_button.setText(self.tr("button.run", "Wipe Selected Data"))
+        self.output.setPlaceholderText(self.tr("output.placeholder", "Operation logs will appear here..."))
+        self._apply_theme_styles()
 
-    def _refresh(self) -> None:
-        self.title_label.setText(self._pt("title", "Privacy Shredder"))
-        self.desc_label.setText(self._pt("description", "Permanently destroy sensitive files. Warning: Data deleted this way cannot be recovered even with specialized forensics software."))
-        self.queue_label.setText(self._pt("queue.label", "Shredding Queue"))
-        self.add_file_btn.setText(self._pt("button.add_files", "Add Files"))
-        self.add_dir_btn.setText(self._pt("button.add_folder", "Add Folder"))
-        self.clear_btn.setText(self._pt("button.clear", "Clear"))
-        self.passes_label_widget.setText(self._pt("passes.label", "Overwriting Passes:"))
-        self.run_button.setText(self._pt("button.run", "Wipe Selected Data"))
-        self.output.setPlaceholderText(self._pt("output.placeholder", "Operation logs will appear here..."))
+    def _apply_theme_styles(self, *_args) -> None:
+        palette = self.services.theme_manager.current_palette()
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.desc_label,
+            title_size=26,
+            title_weight=700,
+        )
+        self.queue_label.setStyleSheet(section_title_style(palette, size=15, weight=700))
 
     def _add_files(self) -> None:
-        files, _ = QFileDialog.getOpenFileNames(self, self._pt("dialog.select_files", "Select Files to Shred"))
+        files, _ = QFileDialog.getOpenFileNames(self, self.tr("dialog.select_files", "Select Files to Shred"))
         if files:
             for f in files:
                 p = Path(f)
@@ -169,7 +173,7 @@ class PrivacyShredderPage(QWidget):
                     self.path_list.addItem(str(p))
 
     def _add_dir(self) -> None:
-        dir_path = QFileDialog.getExistingDirectory(self, self._pt("dialog.select_folder", "Select Folder to Shred"))
+        dir_path = QFileDialog.getExistingDirectory(self, self.tr("dialog.select_folder", "Select Folder to Shred"))
         if dir_path:
             p = Path(dir_path)
             if p not in self._paths:
@@ -182,13 +186,13 @@ class PrivacyShredderPage(QWidget):
 
     def _run(self) -> None:
         if not self._paths:
-            QMessageBox.information(self, self._pt("dialog.empty.title", "Queue Empty"), self._pt("dialog.empty.body", "Please add files or folders to shred first."))
+            QMessageBox.information(self, self.tr("dialog.empty.title", "Queue Empty"), self.tr("dialog.empty.body", "Please add files or folders to shred first."))
             return
 
         confirm = QMessageBox.critical(
             self,
-            self._pt("dialog.confirm.title", "Final Warning"),
-            self._pt("dialog.confirm.body", "Are you absolutely sure? This will IRREVERSIBLY destroy {count} items. This cannot be undone.", count=str(len(self._paths))),
+            self.tr("dialog.confirm.title", "Final Warning"),
+            self.tr("dialog.confirm.body", "Are you absolutely sure? This will IRREVERSIBLY destroy {count} items. This cannot be undone.", count=str(len(self._paths))),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No
         )
@@ -208,12 +212,12 @@ class PrivacyShredderPage(QWidget):
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,
-            status_text=self._pt("log.start", "Starting secure shredding..."),
+            status_text=self.tr("log.start", "Starting secure shredding..."),
         )
 
     def _handle_result(self, payload: object) -> None:
         self._clear_queue()
-        self.services.record_run(self.plugin_id, "SUCCESS", self._pt("log.done", "Privacy shredding operation complete."))
+        self.services.record_run(self.plugin_id, "SUCCESS", self.tr("log.done", "Privacy shredding operation complete."))
 
     def _handle_error(self, payload: object) -> None:
         message = payload.get("message", "Unknown shred error") if isinstance(payload, dict) else str(payload)

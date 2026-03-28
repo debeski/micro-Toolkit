@@ -17,16 +17,13 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, tr
 from micro_toolkit.core.table_model import DataFrameTableModel
 
 
 def analyze_usage_task(context, services, plugin_id: str, target_dir: str):
     import pandas as pd
-    
-    def _pt(key: str, default: str, **kwargs) -> str:
-        return services.plugin_text(plugin_id, key, default, **kwargs)
 
     def _ensure_western(text: str) -> str:
         eastern = "٠١٢٣٤٥٦٧٨٩"
@@ -34,20 +31,20 @@ def analyze_usage_task(context, services, plugin_id: str, target_dir: str):
         trans = str.maketrans(eastern, western)
         return text.translate(trans)
 
-    context.log(_pt("log.start", "Mapping disk footprint inside '{folder}'...", folder=target_dir))
+    context.log(tr(services, plugin_id, "log.start", "Mapping disk footprint inside '{folder}'...", folder=target_dir))
     nodes = os.listdir(target_dir)
     if not nodes:
-        raise ValueError(_pt("error.empty", "The selected directory is empty."))
+        raise ValueError(tr(services, plugin_id, "error.empty", "The selected directory is empty."))
 
     total_size = 0
     data: list[dict[str, object]] = []
     
-    h_entity = _pt("table.header.entity", "Entity")
-    h_type = _pt("table.header.type", "Type")
-    h_size = _pt("table.header.size", "Size (MB)")
+    h_entity = tr(services, plugin_id, "table.header.entity", "Entity")
+    h_type = tr(services, plugin_id, "table.header.type", "Type")
+    h_size = tr(services, plugin_id, "table.header.size", "Size (MB)")
     
-    t_file = _pt("type.file", "File")
-    t_folder = _pt("type.folder", "Folder")
+    t_file = tr(services, plugin_id, "type.file", "File")
+    t_folder = tr(services, plugin_id, "type.folder", "Folder")
 
     for index, node in enumerate(nodes, start=1):
         context.progress(index / float(len(nodes)))
@@ -92,13 +89,13 @@ def analyze_usage_task(context, services, plugin_id: str, target_dir: str):
 
     dataframe = pd.DataFrame(data)
     if dataframe.empty:
-        raise ValueError(_pt("error.no_data", "No usable size data could be collected."))
+        raise ValueError(tr(services, plugin_id, "error.no_data", "No usable size data could be collected."))
 
     dataframe = dataframe.sort_values(by=h_size, ascending=False).reset_index(drop=True)
     context.progress(1.0)
     
     size_str = _ensure_western(str(round(total_size / (1024 * 1024), 2)))
-    context.log(_pt("log.done", "Usage analysis complete. Total traced size: {size} MB", size=size_str))
+    context.log(tr(services, plugin_id, "log.done", "Usage analysis complete. Total traced size: {size} MB", size=size_str))
     return {
         "dataframe": dataframe,
         "total_size_mb": size_str,
@@ -121,14 +118,12 @@ class UsageAnalyzerPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._table_model = None
         self._latest_dataframe = None
         self._build_ui()
         self.services.i18n.language_changed.connect(self._refresh)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
 
     def _build_ui(self) -> None:
         self.main_layout = QVBoxLayout(self)
@@ -136,12 +131,10 @@ class UsageAnalyzerPage(QWidget):
         self.main_layout.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         self.main_layout.addWidget(self.title_label)
 
         self.desc_label = QLabel()
         self.desc_label.setWordWrap(True)
-        self.desc_label.setStyleSheet("font-size: 14px; color: #43535c;")
         self.main_layout.addWidget(self.desc_label)
 
         folder_row = QHBoxLayout()
@@ -184,21 +177,24 @@ class UsageAnalyzerPage(QWidget):
         self._refresh()
 
     def _refresh(self) -> None:
-        self.title_label.setText(self._pt("title", "Disk Space Visualizer"))
-        self.desc_label.setText(self._pt("description", "Inspect the immediate top-level files and folders inside a directory, sorted by size."))
-        self.folder_input.setPlaceholderText(self._pt("folder.placeholder", "Select a directory to analyze..."))
-        self.browse_button.setText(self._pt("browse", "Browse"))
-        self.run_button.setText(self._pt("run.button", "Analyze Usage"))
-        self.export_button.setText(self._pt("export.button", "Export XLSX"))
-        self.summary_label.setText(self._pt("summary.initial", "Choose a directory to inspect."))
+        self.title_label.setText(self.tr("title", "Disk Space Visualizer"))
+        self.desc_label.setText(self.tr("description", "Inspect the immediate top-level files and folders inside a directory, sorted by size."))
+        self.folder_input.setPlaceholderText(self.tr("folder.placeholder", "Select a directory to analyze..."))
+        self.browse_button.setText(self.tr("browse", "Browse"))
+        self.run_button.setText(self.tr("run.button", "Analyze Usage"))
+        self.export_button.setText(self.tr("export.button", "Export XLSX"))
+        self.summary_label.setText(self.tr("summary.initial", "Choose a directory to inspect."))
         self._apply_theme_styles()
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.desc_label.setStyleSheet(muted_text_style(palette))
-        self.summary_card.setStyleSheet(card_style(palette, radius=14))
-        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.desc_label,
+            cards=(self.summary_card,),
+            summary_label=self.summary_label,
+        )
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
@@ -206,7 +202,7 @@ class UsageAnalyzerPage(QWidget):
     def _browse_folder(self) -> None:
         folder = QFileDialog.getExistingDirectory(
             self,
-            self._pt("dialog.browse", "Select Directory To Analyze"),
+            self.tr("dialog.browse", "Select Directory To Analyze"),
             str(self.services.default_output_path()),
         )
         if folder:
@@ -217,8 +213,8 @@ class UsageAnalyzerPage(QWidget):
         if not folder_path:
             QMessageBox.warning(
                 self, 
-                self._pt("dialog.missing.title", "Missing Input"), 
-                self._pt("dialog.missing.body", "Choose a directory to analyze.")
+                self.tr("dialog.missing.title", "Missing Input"), 
+                self.tr("dialog.missing.body", "Choose a directory to analyze.")
             )
             return
 
@@ -226,7 +222,7 @@ class UsageAnalyzerPage(QWidget):
         self.export_button.setEnabled(False)
         self.table.setModel(None)
         self._table_model = None
-        self.summary_label.setText(self._pt("summary.running", "Analyzing disk usage..."))
+        self.summary_label.setText(self.tr("summary.running", "Analyzing disk usage..."))
 
         self.services.run_task(
             lambda context: analyze_usage_task(context, self.services, self.plugin_id, folder_path),
@@ -248,16 +244,16 @@ class UsageAnalyzerPage(QWidget):
         count_str = count_str.translate(trans)
         
         self.summary_label.setText(
-            self._pt("summary.done", "Analyzed '{target}' and traced {size} MB across {count} entries.", target=result['target_name'], size=result['total_size_mb'], count=count_str)
+            self.tr("summary.done", "Analyzed '{target}' and traced {size} MB across {count} entries.", target=result['target_name'], size=result['total_size_mb'], count=count_str)
         )
         self.export_button.setEnabled(True)
-        self.services.record_run(self.plugin_id, "SUCCESS", self._pt("summary.done", "Analyzed usage for {target}", target=result['target_name'], size=result['total_size_mb'], count=count_str))
+        self.services.record_run(self.plugin_id, "SUCCESS", self.tr("summary.done", "Analyzed usage for {target}", target=result['target_name'], size=result['total_size_mb'], count=count_str))
 
     def _handle_error(self, payload: object) -> None:
         message = payload.get("message", "Unknown usage analysis error") if isinstance(payload, dict) else str(payload)
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.failed", "Disk usage analysis failed."), "ERROR")
+        self.services.log(self.tr("log.failed", "Disk usage analysis failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)
@@ -267,11 +263,11 @@ class UsageAnalyzerPage(QWidget):
             return
         save_path, _ = QFileDialog.getSaveFileName(
             self,
-            self._pt("dialog.export", "Export Disk Usage"),
+            self.tr("dialog.export", "Export Disk Usage"),
             str(self.services.default_output_path() / "disk_usage.xlsx"),
             "Excel Files (*.xlsx)",
         )
         if not save_path:
             return
         self._latest_dataframe.to_excel(save_path, index=False)
-        self.services.log(self._pt("log.export", "Disk usage exported to {path}.", path=save_path))
+        self.services.log(self.tr("log.export", "Disk usage exported to {path}.", path=save_path))

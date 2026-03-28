@@ -25,35 +25,19 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.media_utils import SUPPORTED_IMAGE_FILTER, pil_to_pixmap, safe_output_extension, transform_image
-from micro_toolkit.core.page_style import card_style, label_surface_style, muted_text_style, page_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome, label_surface_style, muted_text_style
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr, safe_tr
 from micro_toolkit.core.widgets import ScrollSafeComboBox
 
 
 QComboBox = ScrollSafeComboBox
-
-
-def _tr(translate, key: str, default: str, **kwargs) -> str:
-    if callable(translate):
-        try:
-            return translate(key, default, **kwargs)
-        except Exception:
-            pass
-    text = default
-    if kwargs:
-        try:
-            text = text.format(**kwargs)
-        except Exception:
-            pass
-    return text
-
 
 def run_image_transform_task(context, files: list[str], output_dir: str, options: dict, *, translate=None):
     os.makedirs(output_dir, exist_ok=True)
     transformed_files = []
     for index, file_path in enumerate(files, start=1):
         context.progress(index / float(len(files)))
-        context.log(_tr(translate, "log.transforming", "Transforming {file}...", file=os.path.basename(file_path)))
+        context.log(safe_tr(translate, "log.transforming", "Transforming {file}...", file=os.path.basename(file_path)))
         image = Image.open(file_path)
         transformed, requested_format = transform_image(
             image,
@@ -76,7 +60,7 @@ def run_image_transform_task(context, files: list[str], output_dir: str, options
         transformed.save(output_path, format=save_format)
         transformed_files.append(output_path)
 
-    context.log(_tr(translate, "log.done", "Batch transform complete. Wrote {count} files.", count=len(transformed_files)))
+    context.log(safe_tr(translate, "log.done", "Batch transform complete. Wrote {count} files.", count=len(transformed_files)))
     return {
         "count": len(transformed_files),
         "output_dir": output_dir,
@@ -99,6 +83,7 @@ class ImageTransformerPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self.files: list[str] = []
         self.current_preview_path: str | None = None
         self.current_aspect: float | None = None
@@ -108,21 +93,16 @@ class ImageTransformerPage(QWidget):
         self.services.i18n.language_changed.connect(self._handle_language_change)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
 
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
-
     def _build_ui(self) -> None:
         outer = QVBoxLayout(self)
         outer.setContentsMargins(28, 28, 28, 28)
         outer.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         outer.addWidget(self.title_label)
 
         self.description_label = QLabel()
         self.description_label.setWordWrap(True)
-        self.description_label.setStyleSheet("font-size: 14px; color: #43535c;")
         outer.addWidget(self.description_label)
 
         self.settings_card = QFrame()
@@ -233,9 +213,15 @@ class ImageTransformerPage(QWidget):
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.description_label.setStyleSheet(muted_text_style(palette))
-        self.settings_card.setStyleSheet(card_style(palette, radius=14))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.description_label,
+            cards=(self.settings_card,),
+            title_size=26,
+            title_weight=700,
+            card_radius=14,
+        )
         self.preview_label.setStyleSheet(label_surface_style(palette, radius=14) + muted_text_style(palette))
 
     def _handle_theme_change(self, _mode: str) -> None:
@@ -266,28 +252,28 @@ class ImageTransformerPage(QWidget):
             self._show_preview_for_row(self.file_list.currentRow())
 
     def _apply_texts(self) -> None:
-        self.title_label.setText(self._pt("title", "Image Transformer"))
+        self.title_label.setText(self.tr("title", "Image Transformer"))
         self.description_label.setText(
-            self._pt(
+            self.tr(
                 "description",
                 "Batch rotate, resize, and convert images with a more structured workflow and per-image preview.",
             )
         )
-        self.rotate_label.setText(self._pt("label.rotate", "Rotate"))
-        self.resize_label.setText(self._pt("label.resize", "Resize"))
-        self.format_label.setText(self._pt("label.format", "Format"))
-        self.files_label.setText(self._pt("label.files", "Files"))
-        self.rotate_enabled.setText(self._pt("toggle.enable", "Enable"))
-        self.resize_enabled.setText(self._pt("toggle.enable", "Enable"))
-        self.format_enabled.setText(self._pt("toggle.enable", "Enable"))
-        self.keep_aspect.setText(self._pt("toggle.keep_aspect", "Keep aspect"))
-        self.resize_width.setPlaceholderText(self._pt("placeholder.width", "W"))
-        self.resize_height.setPlaceholderText(self._pt("placeholder.height", "H"))
+        self.rotate_label.setText(self.tr("label.rotate", "Rotate"))
+        self.resize_label.setText(self.tr("label.resize", "Resize"))
+        self.format_label.setText(self.tr("label.format", "Format"))
+        self.files_label.setText(self.tr("label.files", "Files"))
+        self.rotate_enabled.setText(self.tr("toggle.enable", "Enable"))
+        self.resize_enabled.setText(self.tr("toggle.enable", "Enable"))
+        self.format_enabled.setText(self.tr("toggle.enable", "Enable"))
+        self.keep_aspect.setText(self.tr("toggle.keep_aspect", "Keep aspect"))
+        self.resize_width.setPlaceholderText(self.tr("placeholder.width", "W"))
+        self.resize_height.setPlaceholderText(self.tr("placeholder.height", "H"))
         self._set_combo_items(
             self.resize_mode,
             [
-                ("pixels", self._pt("resize_mode.pixels", "Pixels")),
-                ("percent", self._pt("resize_mode.percent", "Percent")),
+                ("pixels", self.tr("resize_mode.pixels", "Pixels")),
+                ("percent", self.tr("resize_mode.percent", "Percent")),
             ],
         )
         self._set_combo_items(
@@ -298,12 +284,12 @@ class ImageTransformerPage(QWidget):
                 ("webp", "WEBP"),
             ],
         )
-        self.add_button.setText(self._pt("add", "Add Images"))
-        self.clear_button.setText(self._pt("clear", "Clear All"))
-        self.run_button.setText(self._pt("run", "Run Transform"))
+        self.add_button.setText(self.tr("add", "Add Images"))
+        self.clear_button.setText(self.tr("clear", "Clear All"))
+        self.run_button.setText(self.tr("run", "Run Transform"))
         if not self.preview_label.pixmap():
-            self.preview_label.setText(self._pt("preview.empty", "Select an image to preview."))
-        self.summary_output.setPlaceholderText(self._pt("summary.placeholder", "Transform summary will appear here."))
+            self.preview_label.setText(self.tr("preview.empty", "Select an image to preview."))
+        self.summary_output.setPlaceholderText(self.tr("summary.placeholder", "Transform summary will appear here."))
 
     def _toggle_resize_controls(self, enabled: bool) -> None:
         self.resize_mode.setEnabled(enabled)
@@ -314,7 +300,7 @@ class ImageTransformerPage(QWidget):
     def _add_files(self) -> None:
         files, _ = QFileDialog.getOpenFileNames(
             self,
-            self._pt("dialog.select_images", "Select Images"),
+            self.tr("dialog.select_images", "Select Images"),
             str(self.services.default_output_path()),
             SUPPORTED_IMAGE_FILTER,
         )
@@ -333,7 +319,7 @@ class ImageTransformerPage(QWidget):
         self.current_aspect = None
         self.file_list.clear()
         self.preview_label.setPixmap(None)
-        self.preview_label.setText(self._pt("preview.empty", "Select an image to preview."))
+        self.preview_label.setText(self.tr("preview.empty", "Select an image to preview."))
 
     def _refresh_file_list(self) -> None:
         self.file_list.clear()
@@ -361,7 +347,7 @@ class ImageTransformerPage(QWidget):
                     self._resizing_guard = False
         except Exception as exc:
             self.preview_label.setPixmap(None)
-            self.preview_label.setText(self._pt("preview.error", "Preview error: {message}", message=exc))
+            self.preview_label.setText(self.tr("preview.error", "Preview error: {message}", message=exc))
 
     def _sync_resize_from_width(self, value: str) -> None:
         if self._resizing_guard or not self.keep_aspect.isChecked() or not self.current_aspect:
@@ -391,13 +377,13 @@ class ImageTransformerPage(QWidget):
         if not self.files:
             QMessageBox.warning(
                 self,
-                self._pt("error.missing_input.title", "Missing Input"),
-                self._pt("error.missing_files", "Add at least one image first."),
+                self.tr("error.missing_input.title", "Missing Input"),
+                self.tr("error.missing_files", "Add at least one image first."),
             )
             return
         output_dir = QFileDialog.getExistingDirectory(
             self,
-            self._pt("dialog.select_output", "Select Output Folder"),
+            self.tr("dialog.select_output", "Select Output Folder"),
             str(self.services.default_output_path()),
         )
         if not output_dir:
@@ -415,7 +401,7 @@ class ImageTransformerPage(QWidget):
         self.run_button.setEnabled(False)
         self.summary_output.clear()
         self.services.run_task(
-            lambda context: run_image_transform_task(context, list(self.files), output_dir, options, translate=self._pt),
+            lambda context: run_image_transform_task(context, list(self.files), output_dir, options, translate=self.tr),
             on_result=self._handle_result,
             on_error=self._handle_error,
             on_finished=self._finish_run,
@@ -424,20 +410,20 @@ class ImageTransformerPage(QWidget):
     def _handle_result(self, payload: object) -> None:
         result = dict(payload)
         self.summary_output.setPlainText(
-            self._pt(
+            self.tr(
                 "summary.done",
                 "Batch transform complete.\nFiles written: {count}\nOutput folder: {output_dir}",
                 count=result["count"],
                 output_dir=result["output_dir"],
             )
         )
-        self.services.record_run(self.plugin_id, "SUCCESS", self._pt("run.success", "Transformed {count} images", count=result["count"]))
+        self.services.record_run(self.plugin_id, "SUCCESS", self.tr("run.success", "Transformed {count} images", count=result["count"]))
 
     def _handle_error(self, payload: object) -> None:
-        message = payload.get("message", self._pt("error.unknown", "Unknown image transformer error")) if isinstance(payload, dict) else str(payload)
+        message = payload.get("message", self.tr("error.unknown", "Unknown image transformer error")) if isinstance(payload, dict) else str(payload)
         self.summary_output.setPlainText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.failed", "Image transformer failed."), "ERROR")
+        self.services.log(self.tr("log.failed", "Image transformer failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)

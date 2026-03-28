@@ -26,8 +26,8 @@ from PySide6.QtWidgets import (
 )
 
 from micro_toolkit.core.app_utils import generate_output_filename
-from micro_toolkit.core.page_style import card_style, muted_text_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome, section_title_style
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr
 from micro_toolkit.core.table_model import DataFrameTableModel
 from micro_toolkit.core.widgets import ScrollSafeComboBox
 
@@ -183,40 +183,40 @@ class DeepScanAuditorPage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._latest_output_path = None
+        self._latest_result = None
+        self._has_run = False
         self._table_model = None
         self._folder_sources: list[str] = []
         self._excel_sources: list[dict[str, str]] = []
         self._build_ui()
+        self.services.i18n.language_changed.connect(self._handle_language_change)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
-
-    def _pt(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
+        self._apply_texts()
 
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(16)
 
-        title = QLabel(self._pt("title", "Deep-Scan Auditor"))
-        title.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
-        layout.addWidget(title)
+        self.title_label = QLabel(self.tr("title", "Deep-Scan Auditor"))
+        layout.addWidget(self.title_label)
 
-        description = QLabel(
-            self._pt("description", "Audit multiple folders for duplicate files or scan multiple Excel workbooks using per-file column names.")
+        self.description_label = QLabel(
+            self.tr("description", "Audit multiple folders for duplicate files or scan multiple Excel workbooks using per-file column names.")
         )
-        description.setWordWrap(True)
-        description.setStyleSheet("font-size: 14px; color: #43535c;")
-        layout.addWidget(description)
+        self.description_label.setWordWrap(True)
+        layout.addWidget(self.description_label)
 
         mode_row = QHBoxLayout()
         mode_row.setSpacing(10)
-        mode_label = QLabel(self._pt("label.mode", "Mode"))
-        mode_label.setFixedWidth(90)
-        mode_row.addWidget(mode_label)
+        self.mode_label_widget = QLabel(self.tr("label.mode", "Mode"))
+        self.mode_label_widget.setFixedWidth(90)
+        mode_row.addWidget(self.mode_label_widget)
         self.mode_combo = QComboBox()
-        self.mode_combo.addItem(self._pt("mode.folder", "Folder"), "folder")
-        self.mode_combo.addItem(self._pt("mode.excel", "Excel"), "excel")
+        self.mode_combo.addItem(self.tr("mode.folder", "Folder"), "folder")
+        self.mode_combo.addItem(self.tr("mode.excel", "Excel"), "excel")
         self.mode_combo.currentIndexChanged.connect(self._handle_mode_changed)
         mode_row.addWidget(self.mode_combo, 1)
         layout.addLayout(mode_row)
@@ -225,19 +225,18 @@ class DeepScanAuditorPage(QWidget):
         sources_layout = QVBoxLayout(self.sources_card)
         sources_layout.setContentsMargins(16, 14, 16, 14)
         sources_layout.setSpacing(10)
-        sources_title = QLabel(self._pt("label.sources", "Selected Sources"))
-        sources_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #10232c;")
-        sources_layout.addWidget(sources_title)
+        self.sources_title_label = QLabel(self.tr("label.sources", "Selected Sources"))
+        sources_layout.addWidget(self.sources_title_label)
 
         sources_actions = QHBoxLayout()
         sources_actions.setSpacing(8)
-        self.browse_button = QPushButton(self._pt("button.add.folder", "Add Folder"))
+        self.browse_button = QPushButton(self.tr("button.add.folder", "Add Folder"))
         self.browse_button.clicked.connect(self._browse)
         sources_actions.addWidget(self.browse_button, 0, Qt.AlignmentFlag.AlignLeft)
-        self.remove_source_button = QPushButton(self._pt("button.remove", "Remove Selected"))
+        self.remove_source_button = QPushButton(self.tr("button.remove", "Remove Selected"))
         self.remove_source_button.clicked.connect(self._remove_selected_sources)
         sources_actions.addWidget(self.remove_source_button, 0, Qt.AlignmentFlag.AlignLeft)
-        self.clear_sources_button = QPushButton(self._pt("button.clear", "Clear"))
+        self.clear_sources_button = QPushButton(self.tr("button.clear", "Clear"))
         self.clear_sources_button.clicked.connect(self._clear_sources)
         sources_actions.addWidget(self.clear_sources_button, 0, Qt.AlignmentFlag.AlignLeft)
         sources_actions.addStretch(1)
@@ -262,14 +261,13 @@ class DeepScanAuditorPage(QWidget):
         folder_criteria_layout = QVBoxLayout(self.folder_criteria_card)
         folder_criteria_layout.setContentsMargins(16, 14, 16, 14)
         folder_criteria_layout.setSpacing(8)
-        folder_criteria_title = QLabel(self._pt("label.criteria", "Folder Matching Criteria"))
-        folder_criteria_title.setStyleSheet("font-size: 14px; font-weight: 700; color: #10232c;")
-        folder_criteria_layout.addWidget(folder_criteria_title)
-        self.name_checkbox = QCheckBox(self._pt("criteria.name", "Name"))
-        self.size_checkbox = QCheckBox(self._pt("criteria.size", "Size"))
+        self.folder_criteria_title_label = QLabel(self.tr("label.criteria", "Folder Matching Criteria"))
+        folder_criteria_layout.addWidget(self.folder_criteria_title_label)
+        self.name_checkbox = QCheckBox(self.tr("criteria.name", "Name"))
+        self.size_checkbox = QCheckBox(self.tr("criteria.size", "Size"))
         self.size_checkbox.setChecked(True)
-        self.created_checkbox = QCheckBox(self._pt("criteria.created", "Created Date"))
-        self.hash_checkbox = QCheckBox(self._pt("criteria.hash", "Hash"))
+        self.created_checkbox = QCheckBox(self.tr("criteria.created", "Created Date"))
+        self.hash_checkbox = QCheckBox(self.tr("criteria.hash", "Hash"))
         self.hash_checkbox.setChecked(True)
         criteria_grid = QGridLayout()
         criteria_grid.setHorizontalSpacing(24)
@@ -283,11 +281,11 @@ class DeepScanAuditorPage(QWidget):
 
         controls = QHBoxLayout()
         controls.setSpacing(12)
-        self.run_button = QPushButton(self._pt("button.run", "Run Audit"))
+        self.run_button = QPushButton(self.tr("button.run", "Run Audit"))
         self.run_button.clicked.connect(self._run)
         controls.addWidget(self.run_button, 0, Qt.AlignmentFlag.AlignLeft)
 
-        self.open_output_button = QPushButton(self._pt("button.open", "Open Workbook"))
+        self.open_output_button = QPushButton(self.tr("button.open", "Open Workbook"))
         self.open_output_button.setEnabled(False)
         self.open_output_button.clicked.connect(self._open_output)
         controls.addWidget(self.open_output_button, 0, Qt.AlignmentFlag.AlignLeft)
@@ -297,7 +295,7 @@ class DeepScanAuditorPage(QWidget):
         self.summary_card = QFrame()
         summary_layout = QVBoxLayout(self.summary_card)
         summary_layout.setContentsMargins(16, 14, 16, 14)
-        self.summary_label = QLabel(self._pt("summary.empty", "Choose one or more sources, then run the deep-scan audit."))
+        self.summary_label = QLabel(self.tr("summary.empty", "Choose one or more sources, then run the deep-scan audit."))
         self.summary_label.setWordWrap(True)
         summary_layout.addWidget(self.summary_label)
         layout.addWidget(self.summary_card)
@@ -312,6 +310,46 @@ class DeepScanAuditorPage(QWidget):
         self._update_mode_ui()
         self._apply_theme_styles()
 
+    def _set_combo_items(self, combo: QComboBox, items: list[tuple[str, str]]) -> None:
+        current_value = str(combo.currentData() or combo.currentText() or "")
+        combo.blockSignals(True)
+        combo.clear()
+        for label, value in items:
+            combo.addItem(label, value)
+        index = combo.findData(current_value)
+        combo.setCurrentIndex(index if index >= 0 else 0)
+        combo.blockSignals(False)
+
+    def _apply_texts(self) -> None:
+        self.title_label.setText(self.tr("title", "Deep-Scan Auditor"))
+        self.description_label.setText(
+            self.tr("description", "Audit multiple folders for duplicate files or scan multiple Excel workbooks using per-file column names.")
+        )
+        self.mode_label_widget.setText(self.tr("label.mode", "Mode"))
+        self._set_combo_items(
+            self.mode_combo,
+            [
+                (self.tr("mode.folder", "Folder"), "folder"),
+                (self.tr("mode.excel", "Excel"), "excel"),
+            ],
+        )
+        self.sources_title_label.setText(self.tr("label.sources", "Selected Sources"))
+        self.remove_source_button.setText(self.tr("button.remove", "Remove Selected"))
+        self.clear_sources_button.setText(self.tr("button.clear", "Clear"))
+        self.folder_criteria_title_label.setText(self.tr("label.criteria", "Folder Matching Criteria"))
+        self.name_checkbox.setText(self.tr("criteria.name", "Name"))
+        self.size_checkbox.setText(self.tr("criteria.size", "Size"))
+        self.created_checkbox.setText(self.tr("criteria.created", "Created Date"))
+        self.hash_checkbox.setText(self.tr("criteria.hash", "Hash"))
+        self.run_button.setText(self.tr("button.run", "Run Audit"))
+        self.open_output_button.setText(self.tr("button.open", "Open Workbook"))
+        self._update_mode_ui()
+        if self._latest_result is not None:
+            self._render_result_payload(self._latest_result)
+        elif not self._has_run:
+            self.summary_label.setText(self.tr("summary.empty", "Choose one or more sources, then run the deep-scan audit."))
+        self._apply_theme_styles()
+
     def _current_mode(self) -> str:
         return self.mode_combo.currentData()
 
@@ -322,18 +360,18 @@ class DeepScanAuditorPage(QWidget):
     def _update_mode_ui(self) -> None:
         is_excel = self._current_mode() == "excel"
         self.folder_criteria_card.setVisible(not is_excel)
-        self.browse_button.setText(self._pt("button.add.excel", "Add Workbook(s)") if is_excel else self._pt("button.add.folder", "Add Folder"))
+        self.browse_button.setText(self.tr("button.add.excel", "Add Workbook(s)") if is_excel else self.tr("button.add.folder", "Add Folder"))
         self.sources_table.clearContents()
         self.sources_table.setRowCount(0)
         if is_excel:
             self.sources_table.setColumnCount(2)
-            self.sources_table.setHorizontalHeaderLabels([self._pt("table.columns", "Columns"), self._pt("table.workbook", "Workbook")])
+            self.sources_table.setHorizontalHeaderLabels([self.tr("table.columns", "Columns"), self.tr("table.workbook", "Workbook")])
             self.sources_table.setColumnWidth(0, 220)
             for spec in self._excel_sources:
                 self._append_excel_row(spec["path"], spec["columns"])
         else:
             self.sources_table.setColumnCount(1)
-            self.sources_table.setHorizontalHeaderLabels([self._pt("table.folder", "Folder")])
+            self.sources_table.setHorizontalHeaderLabels([self.tr("table.folder", "Folder")])
             for folder_path in self._folder_sources:
                 self._append_folder_row(folder_path)
 
@@ -349,7 +387,7 @@ class DeepScanAuditorPage(QWidget):
         row = self.sources_table.rowCount()
         self.sources_table.insertRow(row)
         column_item = QTableWidgetItem(columns)
-        column_item.setToolTip(self._pt("tooltip.columns", "Comma-separated column names"))
+        column_item.setToolTip(self.tr("tooltip.columns", "Comma-separated column names"))
         self.sources_table.setItem(row, 0, column_item)
         file_item = QTableWidgetItem(file_path)
         file_item.setToolTip(file_path)
@@ -360,9 +398,9 @@ class DeepScanAuditorPage(QWidget):
         if self._current_mode() == "excel":
             file_paths, _ = QFileDialog.getOpenFileNames(
                 self,
-                self._pt("dialog.browse.excel", "Select Workbooks"),
+                self.tr("dialog.browse.excel", "Select Workbooks"),
                 str(self.services.default_output_path()),
-                self._pt("dialog.browse.excel.filter", "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)"),
+                self.tr("dialog.browse.excel.filter", "Excel Files (*.xlsx *.xlsm *.xls);;All Files (*)"),
             )
             for file_path in file_paths:
                 if any(spec["path"] == file_path for spec in self._excel_sources):
@@ -371,7 +409,7 @@ class DeepScanAuditorPage(QWidget):
         else:
             folder = QFileDialog.getExistingDirectory(
                 self,
-                self._pt("dialog.browse.folder", "Select Folder"),
+                self.tr("dialog.browse.folder", "Select Folder"),
                 str(self.services.default_output_path()),
             )
             if folder and folder not in self._folder_sources:
@@ -434,7 +472,7 @@ class DeepScanAuditorPage(QWidget):
                 continue
             if not columns_text:
                 raise ValueError(
-                    self._pt(
+                    self.tr(
                         "dialog.error.missing_columns_for_workbook",
                         "Enter one or more column names for workbook '{name}'.",
                         name=os.path.basename(path),
@@ -443,7 +481,7 @@ class DeepScanAuditorPage(QWidget):
             columns = parse_excel_columns(columns_text)
             if not columns:
                 raise ValueError(
-                    self._pt(
+                    self.tr(
                         "dialog.error.invalid_columns_for_workbook",
                         "Enter valid column names for workbook '{name}'.",
                         name=os.path.basename(path),
@@ -458,21 +496,21 @@ class DeepScanAuditorPage(QWidget):
         try:
             excel_specs = self._collect_excel_specs() if mode == "excel" else []
         except ValueError as exc:
-            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), str(exc))
+            QMessageBox.warning(self, self.tr("dialog.error.title", "Missing Input"), str(exc))
             return
 
         if mode == "excel" and not excel_specs:
-            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_excel", "Choose one or more workbooks."))
+            QMessageBox.warning(self, self.tr("dialog.error.title", "Missing Input"), self.tr("dialog.error.missing_excel", "Choose one or more workbooks."))
             return
         if mode == "folder" and not self._folder_sources:
-            QMessageBox.warning(self, self._pt("dialog.error.title", "Missing Input"), self._pt("dialog.error.missing_folder", "Choose one or more folders."))
+            QMessageBox.warning(self, self.tr("dialog.error.title", "Missing Input"), self.tr("dialog.error.missing_folder", "Choose one or more folders."))
             return
 
         self.run_button.setEnabled(False)
         self.open_output_button.setEnabled(False)
         self.table.setModel(None)
         self._table_model = None
-        self.summary_label.setText(self._pt("summary.running", "Running deep-scan audit..."))
+        self.summary_label.setText(self.tr("summary.running", "Running deep-scan audit..."))
 
         if mode == "excel":
             task = lambda context: audit_excel_duplicates_task(
@@ -506,39 +544,58 @@ class DeepScanAuditorPage(QWidget):
 
     def _handle_result(self, payload: object) -> None:
         result = dict(payload)
-        self._latest_output_path = result["output_path"]
-        self._table_model = DataFrameTableModel(result["dataframe"])
-        self.table.setModel(self._table_model)
-        self.summary_label.setText(
-            self._pt(
-                "summary.success",
-                "Found {row_count} duplicate result rows across {source_count} source entries in {mode} mode. Previewing the first {preview_count} rows.",
-                row_count=result['row_count'],
-                source_count=result['source_count'],
-                mode=self._pt(f"mode.{result['mode']}", result['mode']),
-                preview_count=len(result['dataframe'])
-            )
-        )
-        self.open_output_button.setEnabled(True)
-        self.services.record_run(self.plugin_id, "SUCCESS", self._pt("log.task.success", "Generated deep-scan audit report in {mode} mode", mode=result['mode']))
+        self._has_run = True
+        self._latest_result = result
+        self._render_result_payload(result)
+        self.services.record_run(self.plugin_id, "SUCCESS", self.tr("log.task.success", "Generated deep-scan audit report in {mode} mode", mode=result['mode']))
 
     def _handle_error(self, payload: object) -> None:
-        message = payload.get("message", self._pt("error.unknown", "Unknown deep-scan auditor error")) if isinstance(payload, dict) else str(payload)
+        self._has_run = True
+        self._latest_result = None
+        message = payload.get("message", self.tr("error.unknown", "Unknown deep-scan auditor error")) if isinstance(payload, dict) else str(payload)
         self.summary_label.setText(message)
         self.services.record_run(self.plugin_id, "ERROR", message[:500])
-        self.services.log(self._pt("log.error", "Deep-Scan Auditor failed."), "ERROR")
+        self.services.log(self.tr("log.error", "Deep-Scan Auditor failed."), "ERROR")
 
     def _finish_run(self) -> None:
         self.run_button.setEnabled(True)
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        for frame in (self.sources_card, self.folder_criteria_card, self.summary_card):
-            frame.setStyleSheet(card_style(palette, radius=14))
-        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.description_label,
+            cards=(self.sources_card, self.folder_criteria_card, self.summary_card),
+            summary_label=self.summary_label,
+            title_size=26,
+            title_weight=700,
+            card_radius=14,
+        )
+        self.sources_title_label.setStyleSheet(section_title_style(palette, size=14, weight=700))
+        self.folder_criteria_title_label.setStyleSheet(section_title_style(palette, size=14, weight=700))
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
+
+    def _handle_language_change(self) -> None:
+        self._apply_texts()
+
+    def _render_result_payload(self, result: dict[str, object]) -> None:
+        self._latest_output_path = str(result["output_path"])
+        self._table_model = DataFrameTableModel(result["dataframe"])
+        self.table.setModel(self._table_model)
+        self.summary_label.setText(
+            self.tr(
+                "summary.success",
+                "Found {row_count} duplicate result rows across {source_count} source entries in {mode} mode. Previewing the first {preview_count} rows.",
+                row_count=result["row_count"],
+                source_count=result["source_count"],
+                mode=self.tr(f"mode.{result['mode']}", result["mode"]),
+                preview_count=len(result["dataframe"]),
+            )
+        )
+        self.open_output_button.setEnabled(True)
 
     def _open_output(self) -> None:
         if self._latest_output_path:

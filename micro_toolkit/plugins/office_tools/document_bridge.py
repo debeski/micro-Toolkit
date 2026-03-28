@@ -24,8 +24,8 @@ from PySide6.QtWidgets import (
 from micro_toolkit.core.app_utils import generate_output_filename, open_file_or_folder
 from micro_toolkit.core.command_runtime import HeadlessTaskContext
 from micro_toolkit.core.document_converter import convert_docx_to_markdown, convert_markdown_to_docx
-from micro_toolkit.core.page_style import card_style, muted_text_style, page_title_style
-from micro_toolkit.core.plugin_api import QtPlugin
+from micro_toolkit.core.page_style import apply_page_chrome
+from micro_toolkit.core.plugin_api import QtPlugin, bind_tr
 from micro_toolkit.core.widgets import ScrollSafeComboBox
 
 
@@ -157,6 +157,7 @@ class DocumentBridgePage(QWidget):
         super().__init__()
         self.services = services
         self.plugin_id = plugin_id
+        self.tr = bind_tr(services, plugin_id)
         self._latest_output_path: str | None = None
         self._build_ui()
         self.services.i18n.language_changed.connect(self._apply_texts)
@@ -164,21 +165,16 @@ class DocumentBridgePage(QWidget):
         self._apply_texts()
         self._sync_mode_state()
 
-    def _t(self, key: str, default: str, **kwargs) -> str:
-        return self.services.plugin_text(self.plugin_id, key, default, **kwargs)
-
     def _build_ui(self) -> None:
         layout = QVBoxLayout(self)
         layout.setContentsMargins(28, 28, 28, 28)
         layout.setSpacing(16)
 
         self.title_label = QLabel()
-        self.title_label.setStyleSheet("font-size: 26px; font-weight: 700; color: #10232c;")
         layout.addWidget(self.title_label)
 
         self.description_label = QLabel()
         self.description_label.setWordWrap(True)
-        self.description_label.setStyleSheet("font-size: 14px; color: #43535c;")
         layout.addWidget(self.description_label)
 
         self.mode_card = QFrame()
@@ -279,30 +275,30 @@ class DocumentBridgePage(QWidget):
         combo.blockSignals(False)
 
     def _apply_texts(self, *_args) -> None:
-        self.title_label.setText(self._t("ui.title", "Document Bridge"))
+        self.title_label.setText(self.tr("ui.title", "Document Bridge"))
         self.description_label.setText(
-            self._t(
+            self.tr(
                 "ui.description",
                 "Convert Markdown reports to DOCX and convert DOCX documents back to Markdown without leaving the toolkit.",
             )
         )
-        self.mode_label.setText(self._t("ui.mode.label", "Mode"))
-        self.source_label.setText(self._t("ui.source.label", "Source File"))
-        self.output_label.setText(self._t("ui.output.label", "Output File"))
-        self.source_button.setText(self._t("ui.source.browse", "Browse"))
-        self.output_button.setText(self._t("ui.output.browse", "Save As"))
-        self.layout_mode_label.setText(self._t("ui.layout.label", "Layout Direction"))
-        self.font_name_label.setText(self._t("ui.font.label", "Preferred Font"))
-        self.extract_images_checkbox.setText(self._t("ui.extract_images", "Extract embedded images into a sibling media folder"))
-        self.run_button.setText(self._t("ui.run", "Convert"))
-        self.open_output_button.setText(self._t("ui.open_result", "Open Result"))
-        self.output_log.setPlaceholderText(self._t("ui.log.placeholder", "Conversion details will appear here."))
+        self.mode_label.setText(self.tr("ui.mode.label", "Mode"))
+        self.source_label.setText(self.tr("ui.source.label", "Source File"))
+        self.output_label.setText(self.tr("ui.output.label", "Output File"))
+        self.source_button.setText(self.tr("ui.source.browse", "Browse"))
+        self.output_button.setText(self.tr("ui.output.browse", "Save As"))
+        self.layout_mode_label.setText(self.tr("ui.layout.label", "Layout Direction"))
+        self.font_name_label.setText(self.tr("ui.font.label", "Preferred Font"))
+        self.extract_images_checkbox.setText(self.tr("ui.extract_images", "Extract embedded images into a sibling media folder"))
+        self.run_button.setText(self.tr("ui.run", "Convert"))
+        self.open_output_button.setText(self.tr("ui.open_result", "Open Result"))
+        self.output_log.setPlaceholderText(self.tr("ui.log.placeholder", "Conversion details will appear here."))
 
         self._refresh_combo(
             self.mode_combo,
             [
-                (self._t("ui.mode.md_to_docx", "Markdown -> DOCX"), "md_to_docx"),
-                (self._t("ui.mode.docx_to_md", "DOCX -> Markdown"), "docx_to_md"),
+                (self.tr("ui.mode.md_to_docx", "Markdown -> DOCX"), "md_to_docx"),
+                (self.tr("ui.mode.docx_to_md", "DOCX -> Markdown"), "docx_to_md"),
             ],
             self._current_mode(),
         )
@@ -310,9 +306,9 @@ class DocumentBridgePage(QWidget):
         self._refresh_combo(
             self.layout_mode_combo,
             [
-                (self._t("ui.layout.auto", "Auto Detect"), "auto"),
-                (self._t("ui.layout.ltr", "Force LTR"), "ltr"),
-                (self._t("ui.layout.rtl", "Force RTL"), "rtl"),
+                (self.tr("ui.layout.auto", "Auto Detect"), "auto"),
+                (self.tr("ui.layout.ltr", "Force LTR"), "ltr"),
+                (self.tr("ui.layout.rtl", "Force RTL"), "rtl"),
             ],
             current_layout,
         )
@@ -321,11 +317,16 @@ class DocumentBridgePage(QWidget):
 
     def _apply_theme_styles(self) -> None:
         palette = self.services.theme_manager.current_palette()
-        self.title_label.setStyleSheet(page_title_style(palette, size=26, weight=700))
-        self.description_label.setStyleSheet(muted_text_style(palette))
-        for frame in (self.mode_card, self.md_options, self.docx_options, self.summary_card):
-            frame.setStyleSheet(card_style(palette, radius=14))
-        self.summary_label.setStyleSheet(muted_text_style(palette, size=13))
+        apply_page_chrome(
+            palette,
+            title_label=self.title_label,
+            description_label=self.description_label,
+            cards=(self.mode_card, self.md_options, self.docx_options, self.summary_card),
+            summary_label=self.summary_label,
+            title_size=26,
+            title_weight=700,
+            card_radius=14,
+        )
 
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
@@ -335,19 +336,19 @@ class DocumentBridgePage(QWidget):
         is_md_mode = mode == "md_to_docx"
         self.options_stack.setCurrentIndex(0 if is_md_mode else 1)
         self.summary_label.setText(
-            self._t(
+            self.tr(
                 "ui.summary.ready.md_to_docx" if is_md_mode else "ui.summary.ready.docx_to_md",
                 "Choose a file to begin conversion.",
             )
         )
         self.source_input.setPlaceholderText(
-            self._t(
+            self.tr(
                 "ui.source.placeholder.md_to_docx" if is_md_mode else "ui.source.placeholder.docx_to_md",
                 "Choose a source document...",
             )
         )
         self.output_input.setPlaceholderText(
-            self._t(
+            self.tr(
                 "ui.output.placeholder.md_to_docx" if is_md_mode else "ui.output.placeholder.docx_to_md",
                 "Choose where to save the converted file...",
             )
@@ -368,14 +369,14 @@ class DocumentBridgePage(QWidget):
         if self._current_mode() == "md_to_docx":
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
-                self._t("ui.dialog.source.md_to_docx", "Select Markdown File"),
+                self.tr("ui.dialog.source.md_to_docx", "Select Markdown File"),
                 str(self.services.default_output_path()),
                 "Markdown Files (*.md *.markdown *.txt);;All Files (*)",
             )
         else:
             file_path, _ = QFileDialog.getOpenFileName(
                 self,
-                self._t("ui.dialog.source.docx_to_md", "Select DOCX File"),
+                self.tr("ui.dialog.source.docx_to_md", "Select DOCX File"),
                 str(self.services.default_output_path()),
                 "Word Documents (*.docx);;All Files (*)",
             )
@@ -389,14 +390,14 @@ class DocumentBridgePage(QWidget):
         if self._current_mode() == "md_to_docx":
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
-                self._t("ui.dialog.output.md_to_docx", "Save DOCX File"),
+                self.tr("ui.dialog.output.md_to_docx", "Save DOCX File"),
                 suggested,
                 "Word Documents (*.docx)",
             )
         else:
             file_path, _ = QFileDialog.getSaveFileName(
                 self,
-                self._t("ui.dialog.output.docx_to_md", "Save Markdown File"),
+                self.tr("ui.dialog.output.docx_to_md", "Save Markdown File"),
                 suggested,
                 "Markdown Files (*.md)",
             )
@@ -406,18 +407,18 @@ class DocumentBridgePage(QWidget):
     def _run(self) -> None:
         source_path = self.source_input.text().strip()
         if not source_path:
-            QMessageBox.warning(self, self._t("ui.missing.title", "Missing Input"), self._t("ui.missing.source", "Choose a source file first."))
+            QMessageBox.warning(self, self.tr("ui.missing.title", "Missing Input"), self.tr("ui.missing.source", "Choose a source file first."))
             return
 
         output_path = self.output_input.text().strip() or self._suggest_output_path(source_path)
         if not output_path:
-            QMessageBox.warning(self, self._t("ui.missing.title", "Missing Input"), self._t("ui.missing.output", "Choose an output file path."))
+            QMessageBox.warning(self, self.tr("ui.missing.title", "Missing Input"), self.tr("ui.missing.output", "Choose an output file path."))
             return
 
         self.run_button.setEnabled(False)
         self.open_output_button.setEnabled(False)
         self.output_log.setPlainText("")
-        self.summary_label.setText(self._t("ui.summary.running", "Converting document..."))
+        self.summary_label.setText(self.tr("ui.summary.running", "Converting document..."))
 
         if self._current_mode() == "md_to_docx":
             self.services.run_task(
@@ -452,7 +453,7 @@ class DocumentBridgePage(QWidget):
 
         if self._current_mode() == "md_to_docx":
             self.summary_label.setText(
-                self._t(
+                self.tr(
                     "ui.summary.success.md_to_docx",
                     "Created DOCX output with {headings} headings, {tables} tables, and {images} images.",
                     headings=result.get("headings", 0),
@@ -462,7 +463,7 @@ class DocumentBridgePage(QWidget):
             )
         else:
             self.summary_label.setText(
-                self._t(
+                self.tr(
                     "ui.summary.success.docx_to_md",
                     "Created Markdown output with {headings} headings, {tables} tables, and {images} extracted images.",
                     headings=result.get("headings", 0),

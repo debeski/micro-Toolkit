@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import abc
 from dataclasses import dataclass
+from functools import partial
 
 from PySide6.QtWidgets import QWidget
 
@@ -17,6 +18,29 @@ class PluginMetadata:
     allow_name_override: bool = False
     allow_icon_override: bool = False
     preferred_icon: str = ""
+
+
+def tr(services, plugin_id: str, key: str, default: str | None = None, **kwargs) -> str:
+    return services.plugin_text(plugin_id, key, default, **kwargs)
+
+
+def safe_tr(translate, key: str, default: str | None = None, **kwargs) -> str:
+    if callable(translate):
+        try:
+            return translate(key, default, **kwargs)
+        except Exception:
+            pass
+    text = default or ""
+    if kwargs:
+        try:
+            text = text.format(**kwargs)
+        except Exception:
+            pass
+    return text
+
+
+def bind_tr(services, plugin_id: str):
+    return partial(tr, services, plugin_id)
 
 
 class QtPlugin(abc.ABC):
