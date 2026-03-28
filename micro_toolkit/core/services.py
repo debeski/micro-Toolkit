@@ -344,6 +344,12 @@ class AppServices(QObject):
         self._schedule_visual_refresh("Applying theme...")
         return selected
 
+    def set_ui_font_family(self, family: str) -> str:
+        selected = self.theme_manager.set_font_family(family)
+        self.theme_manager.save_to_config()
+        self._schedule_visual_refresh("Applying font...")
+        return selected
+
     def set_density_scale(self, density: int) -> int:
         selected = self.theme_manager.set_density_scale(density)
         self.theme_manager.save_to_config()
@@ -355,6 +361,17 @@ class AppServices(QObject):
         self.theme_manager.save_to_config()
         self._schedule_visual_refresh("Refreshing layout...")
         return normalized
+
+    def set_startup_preferences(self, enabled: bool, *, start_minimized: bool = False) -> dict[str, bool]:
+        normalized_enabled = bool(enabled)
+        normalized_minimized = bool(start_minimized)
+        self.autostart_manager.set_enabled(normalized_enabled, start_minimized=normalized_minimized)
+        self.config.set("run_on_startup", normalized_enabled)
+        self.config.set("start_minimized", normalized_minimized)
+        return {
+            "run_on_startup": normalized_enabled,
+            "start_minimized": normalized_minimized,
+        }
 
     def set_language(self, language: str) -> str:
         requested_language = (language or "en").strip().lower() or "en"

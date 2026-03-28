@@ -44,15 +44,13 @@ Source: "README.md"; DestDir: "{app}"; Flags: ignoreversion
 Name: "{group}\Micro Toolkit"; Filename: "{app}\micro-toolkit.exe"; IconFilename: "{app}\app.ico"
 Name: "{autodesktop}\Micro Toolkit"; Filename: "{app}\micro-toolkit.exe"; IconFilename: "{app}\app.ico"; Tasks: desktopicon
 
-[Registry]
-; Standard startup entry if task selected
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: string; ValueName: "Micro Toolkit"; ValueData: """{app}\micro-toolkit.exe"" gui --start-minimized"; Flags: uninsdeletevalue; Tasks: startup
-; Ensure removal even if created by the app itself (only delete value on uninstall)
-Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueName: "Micro Toolkit"; ValueType: none; Flags: uninsdeletevalue
-
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}\_internal"
 Type: filesandordirs; Name: "{app}"
 
 [Run]
+Filename: "{app}\micro-toolkit.exe"; Parameters: "config startup --enable --start-minimized"; StatusMsg: "Configuring startup preference..."; Flags: runhidden waituntilterminated runasoriginaluser; Tasks: startup
 Filename: "{app}\micro-toolkit.exe"; Description: "{cm:LaunchProgram,Micro Toolkit}"; Flags: nowait postinstall skipifsilent
+
+[UninstallRun]
+Filename: "{app}\micro-toolkit.exe"; Parameters: "config startup --disable"; StatusMsg: "Removing startup preference..."; Flags: runhidden waituntilterminated runasoriginaluser skipifdoesntexist

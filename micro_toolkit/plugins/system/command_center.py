@@ -377,6 +377,9 @@ class CommandCenterPage(QWidget):
         self._theme_preview_timer = QTimer(self)
         self._theme_preview_timer.setSingleShot(True)
         self._theme_preview_timer.timeout.connect(self._apply_pending_theme_preview)
+        self._font_preview_timer = QTimer(self)
+        self._font_preview_timer.setSingleShot(True)
+        self._font_preview_timer.timeout.connect(self._apply_pending_font_preview)
         self._language_preview_timer = QTimer(self)
         self._language_preview_timer.setSingleShot(True)
         self._language_preview_timer.timeout.connect(self._apply_pending_language_preview)
@@ -511,6 +514,7 @@ class CommandCenterPage(QWidget):
         form.setContentsMargins(0, 4, 0, 0)
         form.setSpacing(12)
         self.theme_label = QLabel()
+        self.font_label = QLabel()
         self.language_label = QLabel()
         self.density_label = QLabel()
         self.scaling_label = QLabel()
@@ -536,6 +540,10 @@ class CommandCenterPage(QWidget):
         theme_picker_layout.addWidget(self.dark_mode_checkbox)
         theme_picker_layout.addStretch(1)
         form.addRow(self.theme_label, theme_picker_host)
+
+        self.font_combo = QComboBox()
+        self.font_combo.currentIndexChanged.connect(self._handle_live_font_change)
+        form.addRow(self.font_label, self.font_combo)
 
         self.language_button_group = QButtonGroup(self)
         self.language_button_group.setExclusive(True)
@@ -869,6 +877,7 @@ class CommandCenterPage(QWidget):
         self._suspend_live_updates = True
         self.output_dir_input.setText(str(self.services.default_output_path()))
         self._sync_theme_picker()
+        self._sync_font_picker()
         self._sync_language_picker()
         self.density_slider.setValue(self.services.theme_manager.current_density_scale())
         self.density_value_label.setText(str(self.density_slider.value()))
@@ -910,6 +919,21 @@ class CommandCenterPage(QWidget):
         self.dark_mode_checkbox.setChecked(self.services.theme_manager.is_dark_mode())
         self.dark_mode_checkbox.blockSignals(False)
 
+    def _selected_font_family(self) -> str:
+        return str(self.font_combo.currentData() or self.services.theme_manager.current_font_family())
+
+    def _sync_font_picker(self) -> None:
+        current_font = self.services.theme_manager.current_font_family()
+        available_fonts = self.services.theme_manager.available_font_families()
+        self.font_combo.blockSignals(True)
+        self.font_combo.clear()
+        for family, label in available_fonts:
+            self.font_combo.addItem(label, family)
+        self._set_combo_value(self.font_combo, current_font)
+        if self.font_combo.currentIndex() < 0 and self.font_combo.count() > 0:
+            self.font_combo.setCurrentIndex(0)
+        self.font_combo.blockSignals(False)
+
     def _sync_language_picker(self) -> None:
         current_language = self.i18n.current_language()
         for code, button in self.language_buttons.items():
@@ -921,6 +945,11 @@ class CommandCenterPage(QWidget):
         if self._suspend_live_updates:
             return
         self._schedule_theme_preview()
+
+    def _handle_live_font_change(self) -> None:
+        if self._suspend_live_updates:
+            return
+        self._schedule_font_preview()
 
     def _handle_live_language_change(self) -> None:
         if self._suspend_live_updates:
@@ -1164,6 +1193,9 @@ class CommandCenterPage(QWidget):
     def _schedule_theme_preview(self) -> None:
         self._theme_preview_timer.start(120)
 
+    def _schedule_font_preview(self) -> None:
+        self._font_preview_timer.start(120)
+
     def _schedule_language_preview(self) -> None:
         self._language_preview_timer.start(120)
 
@@ -1175,6 +1207,9 @@ class CommandCenterPage(QWidget):
 
     def _apply_pending_theme_preview(self) -> None:
         self.services.set_theme_selection(self._selected_theme_color(), self.dark_mode_checkbox.isChecked())
+
+    def _apply_pending_font_preview(self) -> None:
+        self.services.set_ui_font_family(self._selected_font_family())
 
     def _apply_pending_language_preview(self) -> None:
         self.services.set_language(self._selected_language())
@@ -1865,7 +1900,7 @@ class CommandCenterPage(QWidget):
         previous_run = bool(self.services.config.get("run_on_startup"))
         previous_minimized = bool(self.services.config.get("start_minimized"))
         try:
-            self.services.autostart_manager.set_enabled(
+            self.services.set_startup_preferences(
                 desired_run,
                 start_minimized=desired_minimized,
             )
@@ -1885,8 +1920,6 @@ class CommandCenterPage(QWidget):
             )
             self._refresh_autostart_status()
             return
-        self.services.config.set("run_on_startup", desired_run)
-        self.services.config.set("start_minimized", desired_minimized)
         self._refresh_autostart_status()
 
     def _handle_run_on_startup_toggled(self, _checked: bool) -> None:
@@ -1919,6 +1952,7 @@ class CommandCenterPage(QWidget):
         for color_key, button in self.theme_color_buttons.items():
             button.setChecked(color_key == target_color)
         self.dark_mode_checkbox.setChecked(bool(defaults.get("material_dark")))
+        self._set_combo_value(self.font_combo, str(defaults.get("ui_font_family") or "Amiri"))
         target_language = str(defaults.get("language") or "en")
         for code, button in self.language_buttons.items():
             button.setChecked(code == target_language)
@@ -1948,6 +1982,7 @@ class CommandCenterPage(QWidget):
         self._handle_developer_mode_toggled(self.developer_mode_checkbox.isChecked())
         self._apply_pending_language_preview()
         self._apply_pending_theme_preview()
+        self._apply_pending_font_preview()
         self._apply_pending_density_preview()
         self._apply_pending_scaling_preview()
 
@@ -2506,6 +2541,7 @@ class CommandCenterPage(QWidget):
 
         self.appearance_title.setText(self.tr("general.appearance.title", "Appearance"))
         self.theme_label.setText(self.tr("theme.label", "Theme"))
+        self.font_label.setText(self.tr("font.label", "UI font"))
         color_labels = {
             "pink": self.tr("theme.color.pink", "Pink"),
             "blue": self.tr("theme.color.blue", "Blue"),
@@ -2525,7 +2561,7 @@ class CommandCenterPage(QWidget):
                     button.setText(label)
                     break
         self.appearance_note.setText(
-            self.tr("appearance.note", "Appearance and language changes apply immediately.")
+            self.tr("appearance.note", "Appearance, font, and language changes apply immediately.")
         )
 
         self.behavior_title.setText(self.tr("general.behavior.title", "Behavior"))
@@ -2807,6 +2843,7 @@ class CommandCenterPage(QWidget):
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
         self._sync_theme_picker()
+        self._sync_font_picker()
         if self.tabs.currentWidget() is self.plugins_tab:
             self._populate_plugin_table()
 

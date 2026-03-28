@@ -270,6 +270,7 @@ class ThemeManager(QObject):
         self.config = config
         self.assets_root = Path(assets_root)
         self._font_family = "Amiri"
+        self._available_font_families: list[str] = []
         self._loaded_font_families: list[str] = []
         self._fonts_initialized = False
         self._color_key = "pink"
@@ -291,6 +292,16 @@ class ThemeManager(QObject):
 
     def available_density_scales(self) -> list[int]:
         return list(range(-3, 4))
+
+    def available_font_families(self) -> list[tuple[str, str]]:
+        self._ensure_font_loaded()
+        if not self._available_font_families:
+            return [(self._font_family, self._font_family)]
+        return [(family, family) for family in self._available_font_families]
+
+    def current_font_family(self) -> str:
+        self._ensure_font_loaded()
+        return self._font_family
 
     def current_theme(self) -> str:
         return self._theme_name_for(self.current_color_key(), self.is_dark_mode())
@@ -329,6 +340,12 @@ class ThemeManager(QObject):
     def set_dark_mode(self, enabled: bool) -> str:
         return self.set_theme(self._theme_name_for(self.current_color_key(), bool(enabled)))
 
+    def set_font_family(self, family: str) -> str:
+        self._ensure_font_loaded()
+        self._font_family = self._resolve_font_family(family)
+        self._refresh_font_stack()
+        return self._font_family
+
     def set_density_scale(self, density: int) -> int:
         normalized = max(-3, min(3, int(density)))
         self._density_scale = normalized
@@ -350,6 +367,7 @@ class ThemeManager(QObject):
                 "material_theme": theme_name,
                 "material_color": self._color_key,
                 "material_dark": self._dark_mode,
+                "ui_font_family": self.current_font_family(),
                 "appearance_mode": "dark" if self._dark_mode else "light",
                 "density_scale": self._density_scale,
                 "ui_scaling": self._ui_scale,
@@ -383,6 +401,12 @@ class ThemeManager(QObject):
             self._ui_scale = min(1.6, max(0.85, float(self.config.get("ui_scaling") or 1.0)))
         except Exception:
             self._ui_scale = 1.0
+
+        configured_font = str(self.config.get("ui_font_family") or self._font_family).strip()
+        self._font_family = configured_font or "Amiri"
+        if self._fonts_initialized:
+            self._font_family = self._resolve_font_family(self._font_family)
+            self._refresh_font_stack()
 
     def current_palette(self) -> ThemePalette:
         base = DARK_PALETTE if self.current_mode() == "dark" else LIGHT_PALETTE
@@ -533,10 +557,13 @@ class ThemeManager(QObject):
 
     def _ensure_font_loaded(self) -> None:
         if self._fonts_initialized and self._loaded_font_families:
+            self._font_family = self._resolve_font_family(self._font_family)
+            self._refresh_font_stack()
             return
-        preferred: list[str] = []
+        available: list[str] = []
         font_candidates = [
             self.assets_root / "fonts" / "Amiri.ttf",
+            self.assets_root / "fonts" / "Cairo.ttf",
             self.assets_root / "fonts" / "DejaVuSans.ttf",
             self.assets_root / "fonts" / "DejaVuSans-Bold.ttf",
         ]
@@ -547,13 +574,35 @@ class ThemeManager(QObject):
             if font_id == -1:
                 continue
             for family in QFontDatabase.applicationFontFamilies(font_id):
-                if family and family not in preferred:
-                    preferred.append(family)
-        for family in ["Amiri", "DejaVu Sans", "Noto Sans Arabic", "Sans Serif"]:
-            if family not in preferred:
+                if family and family not in available:
+                    available.append(family)
+        ordered_available: list[str] = []
+        for family in ["Amiri", "Cairo"]:
+            if family in available and family not in ordered_available:
+                ordered_available.append(family)
+        for family in available:
+            if family not in ordered_available:
+                ordered_available.append(family)
+        self._available_font_families = ordered_available
+        self._font_family = self._resolve_font_family(self._font_family)
+        self._refresh_font_stack()
+        self._fonts_initialized = True
+
+    def _resolve_font_family(self, family: str) -> str:
+        requested = str(family or "").strip()
+        if self._available_font_families:
+            family_lookup = {name.lower(): name for name in self._available_font_families}
+            if requested and requested.lower() in family_lookup:
+                return family_lookup[requested.lower()]
+            return self._available_font_families[0]
+        return requested or "Amiri"
+
+    def _refresh_font_stack(self) -> None:
+        preferred: list[str] = []
+        for family in [self._font_family, *self._available_font_families, "DejaVu Sans", "Noto Sans Arabic", "Sans Serif"]:
+            if family and family not in preferred:
                 preferred.append(family)
         self._loaded_font_families = preferred
-        self._fonts_initialized = True
 
     def _normalized_scale(self) -> float:
         return self._ui_scale
@@ -646,7 +695,7 @@ class ThemeManager(QObject):
 
     def _material_extra(self, palette: ThemePalette) -> dict[str, str]:
         return {
-            "font_family": self._loaded_font_families[0] if self._loaded_font_families else self._font_family,
+            "font_family": self.current_font_family(),
             "density_scale": str(self.current_density_scale()),
             "danger": palette.danger,
             "warning": "#d48f12" if palette.mode == "light" else "#f0b84a",

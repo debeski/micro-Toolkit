@@ -18,6 +18,7 @@ DEFAULT_CONFIG = {
     "material_theme": "light_pink_500.xml",
     "material_color": "pink",
     "material_dark": False,
+    "ui_font_family": "Amiri",
     "density_scale": 0,
     "grayscale": False,
     "invert_colors": False,
@@ -51,7 +52,7 @@ _BOOL_KEYS = {
     "high_contrast",
     "developer_mode",
 }
-_STR_KEYS = {"default_output_path", "default_start_plugin", "language", "appearance_mode", "material_theme", "material_color", "backup_schedule", "backup_last_created_at", "activity_dock_state", "activity_dock_mode"}
+_STR_KEYS = {"default_output_path", "default_start_plugin", "language", "appearance_mode", "material_theme", "material_color", "ui_font_family", "backup_schedule", "backup_last_created_at", "activity_dock_state", "activity_dock_mode"}
 _NUM_KEYS = {"ui_scaling", "density_scale"}
 _DICT_KEYS = {"hotkeys", "collapsed_groups", "plugin_overrides"}
 _LIST_KEYS = {"quick_access"}

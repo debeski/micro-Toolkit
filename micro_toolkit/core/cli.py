@@ -30,6 +30,11 @@ def build_parser() -> argparse.ArgumentParser:
     config = subparsers.add_parser("config", help="Inspect configuration")
     config_sub = config.add_subparsers(dest="config_command", required=True)
     config_sub.add_parser("show", help="Show config")
+    config_startup = config_sub.add_parser("startup", help="Update startup preferences")
+    startup_toggle = config_startup.add_mutually_exclusive_group(required=True)
+    startup_toggle.add_argument("--enable", action="store_true")
+    startup_toggle.add_argument("--disable", action="store_true")
+    config_startup.add_argument("--start-minimized", action="store_true")
 
     workflows = subparsers.add_parser("workflows", help="Manage saved workflows")
     workflows_sub = workflows.add_subparsers(dest="workflows_command", required=True)
@@ -88,6 +93,12 @@ def execute_cli(args) -> int:
 
     if args.command == "config" and args.config_command == "show":
         print(json.dumps(services.config.get_all(), indent=2))
+        return 0
+
+    if args.command == "config" and args.config_command == "startup":
+        enabled = bool(args.enable) and not bool(args.disable)
+        result = services.set_startup_preferences(enabled, start_minimized=bool(args.start_minimized))
+        print(json.dumps(result, indent=2))
         return 0
 
     if args.command == "workflows":
