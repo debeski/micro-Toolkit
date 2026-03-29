@@ -747,6 +747,9 @@ class ThemeManager(QObject):
         QMainWindow {{
             background: {palette.base_bg};
         }}
+        QWidget#AppShellRoot {{
+            background: {palette.base_bg};
+        }}
         QFrame#SidebarCard {{
             background: {palette.component_bg};
             border: none;

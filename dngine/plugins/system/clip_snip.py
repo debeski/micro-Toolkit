@@ -259,6 +259,7 @@ class ClipSnipPage(QWidget):
         self._refresh_entries()
         self.services.i18n.language_changed.connect(self._apply_texts)
         self.services.theme_manager.theme_changed.connect(self._handle_theme_change)
+        self.services.clip_monitor_state_changed.connect(self._sync_clip_monitor_checkbox)
         self._apply_texts()
 
     def _build_ui(self) -> None:
@@ -462,6 +463,14 @@ class ClipSnipPage(QWidget):
     def _handle_theme_change(self, _mode: str) -> None:
         self._apply_theme_styles()
         self._update_detail_panel()
+
+    def _sync_clip_monitor_checkbox(self, enabled: bool) -> None:
+        desired = bool(enabled)
+        if self.clip_monitor_checkbox.isChecked() == desired:
+            return
+        self.clip_monitor_checkbox.blockSignals(True)
+        self.clip_monitor_checkbox.setChecked(desired)
+        self.clip_monitor_checkbox.blockSignals(False)
 
     def resizeEvent(self, event) -> None:
         super().resizeEvent(event)

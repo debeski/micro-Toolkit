@@ -500,6 +500,8 @@ class DNgineWindow(QMainWindow):
         self._dock_state_timer.setInterval(220)
         self._dock_state_timer.timeout.connect(self._save_activity_dock_state)
 
+        self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+        self.setAutoFillBackground(True)
         self.setWindowTitle(APP_NAME)
         self.resize(1420, 900)
         self.setMinimumSize(1180, 720)
@@ -520,6 +522,9 @@ class DNgineWindow(QMainWindow):
 
     def _build_ui(self) -> None:
         central = QWidget(self)
+        central.setObjectName("AppShellRoot")
+        central.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
+        central.setAutoFillBackground(True)
         outer_layout = QHBoxLayout(central)
         outer_layout.setContentsMargins(0, 0, 0, 0)
         outer_layout.setSpacing(0)
@@ -834,18 +839,23 @@ class DNgineWindow(QMainWindow):
         app = QApplication.instance()
         if app is None:
             return
-        should_be_busy = (self._busy_depth + self._visual_busy_depth) > 0
-        if hasattr(self, "top_refresh_spinner") and self.top_refresh_spinner.isVisible():
+        window_visible = self.isVisible()
+        should_be_busy = window_visible and (self._busy_depth + self._visual_busy_depth) > 0
+        if window_visible and hasattr(self, "top_refresh_spinner") and self.top_refresh_spinner.isVisible():
             should_be_busy = True
         if should_be_busy and not self._busy_cursor_active:
             QApplication.setOverrideCursor(Qt.CursorShape.WaitCursor)
             self._busy_cursor_active = True
         elif not should_be_busy and self._busy_cursor_active:
-            QApplication.restoreOverrideCursor()
-            self._busy_cursor_active = False
+            self._clear_busy_cursor_override()
         theme_manager = getattr(self.services, "theme_manager", None)
         if theme_manager is not None and hasattr(theme_manager, "refresh_interactive_cursors"):
             theme_manager.refresh_interactive_cursors(app)
+
+    def _clear_busy_cursor_override(self) -> None:
+        while QApplication.overrideCursor() is not None:
+            QApplication.restoreOverrideCursor()
+        self._busy_cursor_active = False
 
     def show_task_progress(self, progress_value: int | None = None) -> None:
         if progress_value is None:
@@ -1024,7 +1034,22 @@ class DNgineWindow(QMainWindow):
             initial_id = self.plugin_specs[0].plugin_id
         if initial_id is not None:
             self._select_plugin_item(initial_id)
-            self.open_plugin(initial_id)
+            self._open_plugin_immediately(initial_id)
+
+    def _open_plugin_immediately(self, plugin_id: str) -> None:
+        spec = self.plugin_by_id.get(plugin_id)
+        if spec is None:
+            return
+        self._cancel_pending_plugin_open()
+        try:
+            if plugin_id in self._stale_theme_pages:
+                self._rebuild_plugin_page(spec)
+            else:
+                self._ensure_plugin_page(spec)
+        except Exception as exc:
+            self._handle_plugin_open_error(spec, exc)
+            return
+        self._activate_plugin_page(spec)
 
     def _select_plugin_item(self, plugin_id: str) -> None:
         root = self.sidebar_tree.invisibleRootItem()
@@ -1045,16 +1070,28 @@ class DNgineWindow(QMainWindow):
 
         for item in matches:
             if preferred_source and item.data(0, ITEM_SOURCE_ROLE) == preferred_source:
-                self.sidebar_tree.setCurrentItem(item)
+                self.sidebar_tree.blockSignals(True)
+                try:
+                    self.sidebar_tree.setCurrentItem(item)
+                finally:
+                    self.sidebar_tree.blockSignals(False)
                 return
 
         for item in matches:
             if item.data(0, ITEM_SOURCE_ROLE) == "catalog":
-                self.sidebar_tree.setCurrentItem(item)
+                self.sidebar_tree.blockSignals(True)
+                try:
+                    self.sidebar_tree.setCurrentItem(item)
+                finally:
+                    self.sidebar_tree.blockSignals(False)
                 return
 
         if matches:
-            self.sidebar_tree.setCurrentItem(matches[0])
+            self.sidebar_tree.blockSignals(True)
+            try:
+                self.sidebar_tree.setCurrentItem(matches[0])
+            finally:
+                self.sidebar_tree.blockSignals(False)
             return
 
     def _open_command_center_section_on_widget(self, settings_page: QWidget | None, section_id: str | None) -> bool:
@@ -1751,6 +1788,7 @@ class DNgineWindow(QMainWindow):
 
     def restore_from_tray(self):
         self.showNormal()
+        self._sync_busy_cursor()
         self.raise_()
         self.activateWindow()
         return {"restored": True}
@@ -1763,37 +1801,32 @@ class DNgineWindow(QMainWindow):
 
     def changeEvent(self, event) -> None:
         super().changeEvent(event)
-        if event.type() == QEvent.Type.WindowStateChange and self.isMinimized():
-            if self.services.config.get("minimize_to_tray") and self.services.tray_manager.can_hide_to_tray():
-                QTimer.singleShot(0, self._hide_to_tray)
 
     def closeEvent(self, event) -> None:
-        if not self._quitting and self.services.config.get("close_to_tray") and self.services.tray_manager.can_hide_to_tray():
-            event.ignore()
-            self._hide_to_tray()
-            return
-        if not self._quitting and not self._confirm_exit():
-            event.ignore()
-            return
+        if not self._quitting:
+            if self.services.tray_manager.can_hide_to_tray():
+                event.ignore()
+                self._hide_to_tray()
+                return
+            if not self._confirm_exit():
+                event.ignore()
+                return
         self._quitting = True
         if hasattr(self, "terminal_output"):
             self.terminal_output.shutdown()
         super().closeEvent(event)
         if event.isAccepted():
-            if self.services.clip_monitor_enabled():
+            if self.services.tray_manager.can_hide_to_tray():
                 self.services.tray_manager.hide()
                 QApplication.processEvents()
-            self.services.notify_clip_monitor_app_state(False)
             app = QApplication.instance()
             if app is not None:
                 app.quit()
 
     def _hide_to_tray(self) -> None:
         self.hide()
-        self.services.tray_manager.show_message(
-            self.services.i18n.tr("tray.hidden.title", "Running in tray"),
-            self.services.i18n.tr("tray.hidden.body", "DNgine is still running in the system tray."),
-        )
+        self._clear_busy_cursor_override()
+        QTimer.singleShot(0, self._sync_busy_cursor)
 
     def reload_plugin_catalog(self, *, preferred_plugin_id: str | None = None) -> None:
         with self.loading_context(self.services.i18n.tr("shell.refreshing", "Refreshing...")):
@@ -2123,16 +2156,13 @@ class DNgineWindow(QMainWindow):
     def _confirm_exit(self) -> bool:
         if not bool(self.services.config.get("confirm_on_exit")):
             return True
-        body_key = "confirm.exit.body.monitor" if self.services.clip_monitor_enabled() else "confirm.exit.body"
-        body_default = (
-            "This will close the application window. Clip-Monitor will keep running in the background for this session. Do you want to continue?"
-            if self.services.clip_monitor_enabled()
-            else "This will close the application window and stop background features for this session. Do you want to continue?"
-        )
         confirmed, always_ask = confirm_action_with_option(
             self,
             title=self.services.i18n.tr("confirm.exit.title", "Exit DNgine?"),
-            body=self.services.i18n.tr(body_key, body_default),
+            body=self.services.i18n.tr(
+                "confirm.exit.body",
+                "This will exit DNgine and stop Clip-Monitor for this session. Do you want to continue?",
+            ),
             confirm_text=self.services.i18n.tr("confirm.exit.confirm", "Exit"),
             cancel_text=self.services.i18n.tr("confirm.cancel", "Cancel"),
             option_text=self.services.i18n.tr("confirm.exit.ask_always", "Always ask on exit"),

@@ -397,6 +397,7 @@ class CommandCenterPage(QWidget):
         self.services.quick_access_changed.connect(self._render_quick_access_settings)
         self.services.plugin_visuals_changed.connect(lambda _plugin_id: self._render_quick_access_settings())
         self.services.plugin_visuals_changed.connect(lambda _plugin_id: self._populate_startup_page_combo())
+        self.services.clip_monitor_state_changed.connect(self._sync_clip_monitor_checkbox)
 
     def sizeHint(self):
         return self._page_size_hint(minimum=False)
@@ -618,12 +619,6 @@ class CommandCenterPage(QWidget):
         self._configure_note_label(self.behavior_note)
         card_layout.addWidget(self.behavior_note)
 
-        self.minimize_to_tray_checkbox = QCheckBox()
-        self.minimize_to_tray_checkbox.toggled.connect(self._handle_minimize_to_tray_toggled)
-        card_layout.addWidget(self.minimize_to_tray_checkbox)
-        self.close_to_tray_checkbox = QCheckBox()
-        self.close_to_tray_checkbox.toggled.connect(self._handle_close_to_tray_toggled)
-        card_layout.addWidget(self.close_to_tray_checkbox)
         self.clip_monitor_checkbox = QCheckBox()
         self.clip_monitor_checkbox.toggled.connect(self._handle_clip_monitor_toggled)
         card_layout.addWidget(self.clip_monitor_checkbox)
@@ -884,8 +879,6 @@ class CommandCenterPage(QWidget):
         scaling_value = int(round(float(self.services.theme_manager.current_ui_scaling()) * 100))
         self.scaling_slider.setValue(max(85, min(160, scaling_value)))
         self.scaling_value_label.setText(f"{self.scaling_slider.value()}%")
-        self.minimize_to_tray_checkbox.setChecked(bool(self.services.config.get("minimize_to_tray")))
-        self.close_to_tray_checkbox.setChecked(bool(self.services.config.get("close_to_tray")))
         self.clip_monitor_checkbox.setChecked(self.services.clip_monitor_enabled())
         self.confirm_on_exit_checkbox.setChecked(bool(self.services.config.get("confirm_on_exit")))
         self.run_on_startup_checkbox.setChecked(bool(self.services.autostart_manager.is_enabled()))
@@ -1871,22 +1864,19 @@ class CommandCenterPage(QWidget):
             self.services.config.set("backup_schedule", str(self.backup_schedule_combo.currentData() or "monthly"))
         self._refresh_backup_status()
 
-    def _handle_minimize_to_tray_toggled(self, checked: bool) -> None:
-        if self._suspend_live_updates:
-            return
-        self.services.config.set("minimize_to_tray", bool(checked))
-        self.services.tray_manager.sync_visibility()
-
-    def _handle_close_to_tray_toggled(self, checked: bool) -> None:
-        if self._suspend_live_updates:
-            return
-        self.services.config.set("close_to_tray", bool(checked))
-        self.services.tray_manager.sync_visibility()
-
     def _handle_clip_monitor_toggled(self, checked: bool) -> None:
         if self._suspend_live_updates:
             return
         self.services.set_clip_monitor_enabled(bool(checked))
+        self._refresh_autostart_status()
+
+    def _sync_clip_monitor_checkbox(self, enabled: bool) -> None:
+        desired = bool(enabled)
+        if self.clip_monitor_checkbox.isChecked() == desired:
+            return
+        self.clip_monitor_checkbox.blockSignals(True)
+        self.clip_monitor_checkbox.setChecked(desired)
+        self.clip_monitor_checkbox.blockSignals(False)
         self._refresh_autostart_status()
 
     def _handle_confirm_on_exit_toggled(self, checked: bool) -> None:
@@ -1958,8 +1948,6 @@ class CommandCenterPage(QWidget):
             button.setChecked(code == target_language)
         self.density_slider.setValue(int(defaults.get("density_scale") or 0))
         self.scaling_slider.setValue(int(round(float(defaults.get("ui_scaling") or 1.0) * 100)))
-        self.minimize_to_tray_checkbox.setChecked(bool(defaults.get("minimize_to_tray")))
-        self.close_to_tray_checkbox.setChecked(bool(defaults.get("close_to_tray")))
         self.clip_monitor_checkbox.setChecked(bool(defaults.get("clip_monitor_enabled")))
         self.confirm_on_exit_checkbox.setChecked(bool(defaults.get("confirm_on_exit")))
         self.run_on_startup_checkbox.setChecked(bool(defaults.get("run_on_startup")))
@@ -1973,8 +1961,6 @@ class CommandCenterPage(QWidget):
         self._commit_output_dir()
         self._handle_startup_page_changed()
         self._handle_backup_schedule_changed()
-        self._handle_minimize_to_tray_toggled(self.minimize_to_tray_checkbox.isChecked())
-        self._handle_close_to_tray_toggled(self.close_to_tray_checkbox.isChecked())
         self._handle_clip_monitor_toggled(self.clip_monitor_checkbox.isChecked())
         self._handle_confirm_on_exit_toggled(self.confirm_on_exit_checkbox.isChecked())
         self._handle_run_on_startup_toggled(self.run_on_startup_checkbox.isChecked())
@@ -2571,8 +2557,6 @@ class CommandCenterPage(QWidget):
                 "Tray handling, startup behavior, exit confirmation, and developer mode live together here so the app shell is easier to reason about.",
             )
         )
-        self.minimize_to_tray_checkbox.setText(self.tr("tray.minimize", "Minimize to system tray"))
-        self.close_to_tray_checkbox.setText(self.tr("tray.close", "Close to system tray"))
         self.clip_monitor_checkbox.setText(self.tr("clip_monitor.toggle", "Enable Clip-Monitor"))
         self.confirm_on_exit_checkbox.setText(self.tr("exit.confirm", "Always ask on exit"))
         self.run_on_startup_checkbox.setText(self.tr("startup.run", "Start on system login"))

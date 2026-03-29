@@ -89,6 +89,7 @@ class _ShellTaskBridge(QObject):
 class AppServices(QObject):
     quick_access_changed = Signal()
     plugin_visuals_changed = Signal(str)
+    clip_monitor_state_changed = Signal(bool)
 
     def __init__(self):
         super().__init__()
@@ -168,8 +169,11 @@ class AppServices(QObject):
         self.autostart_manager = AutostartManager()
         self.workflow_manager = WorkflowManager(self.workflows_root)
         self.shortcut_manager = ShortcutManager(self.config, self.logger, helper_manager=self.hotkey_helper_manager)
-        self.clip_monitor_manager = ClipMonitorManager(self.config, self.data_root)
-        self.clipboard_quick_panel = ClipboardQuickPanelController(self)
+        self.clip_monitor_manager = ClipMonitorManager(self.config, self.data_root, self.database_path, self.logger)
+        self.clipboard_quick_panel = ClipboardQuickPanelController(
+            self,
+            before_restore_callback=self.clip_monitor_manager.ignore_next_change,
+        )
         self.tray_manager = TrayManager(self)
         self.ui_inspector = UIInspector()
         self.ui_inspector.set_enabled(self.developer_mode_enabled())
@@ -257,6 +261,8 @@ class AppServices(QObject):
         self.application = application
         self.i18n.apply(application)
         self.theme_manager.apply(application)
+        self.autostart_manager.cleanup_legacy_clip_monitor_entries()
+        self.clip_monitor_manager.attach_application(application)
         self.ui_inspector.attach_application(application)
         try:
             self.backup_manager.maybe_create_scheduled_backup()
@@ -268,7 +274,8 @@ class AppServices(QObject):
         self.shortcut_manager.attach(main_window)
         self.tray_manager.attach(main_window)
         self.ui_inspector.attach_main_window(main_window)
-        self._sync_clip_monitor_runtime()
+        self.clip_monitor_manager.refresh_preferences()
+        self.clip_monitor_state_changed.emit(self.clip_monitor_enabled())
 
     def log(self, message: str, level: str = "INFO") -> None:
         self.logger.log(message, level)
@@ -450,41 +457,20 @@ class AppServices(QObject):
     def set_clip_monitor_enabled(self, enabled: bool) -> bool:
         enabled = bool(enabled)
         self.config.set("clip_monitor_enabled", enabled)
-        self.autostart_manager.set_clip_monitor_enabled(enabled)
-        self._sync_clip_monitor_runtime()
+        if enabled:
+            self.clip_monitor_manager.cleanup_legacy_monitor_process()
+            self.clip_monitor_manager.refresh_preferences()
+        else:
+            self.clip_monitor_manager.stop(persist_disabled=False)
         self.tray_manager.sync_visibility()
+        self.clip_monitor_state_changed.emit(enabled)
         return enabled
 
     def show_clipboard_quick_panel(self) -> bool:
-        if self.main_window is not None:
-            self.clipboard_quick_panel.toggle()
-            return True
-        if self.clip_monitor_enabled() and self.clip_monitor_manager.ensure_running():
-            return self.clip_monitor_manager.toggle_quick_panel()
+        if self.main_window is None:
+            return False
+        self.clipboard_quick_panel.toggle()
         return True
-
-    def notify_clip_monitor_app_state(self, active: bool) -> None:
-        if not self.clip_monitor_enabled():
-            return
-        if self.clip_monitor_manager.ensure_running():
-            self.clip_monitor_manager.set_app_active(
-                active,
-                os.getpid() if active else None,
-                prefer_helper=self.hotkey_helper_manager.is_active(),
-            )
-
-    def _sync_clip_monitor_runtime(self) -> None:
-        if self.clip_monitor_enabled():
-            self.clip_monitor_manager.ensure_running()
-            self.clip_monitor_manager.set_app_active(
-                self.main_window is not None,
-                os.getpid() if self.main_window is not None else None,
-                prefer_helper=self.hotkey_helper_manager.is_active(),
-            )
-            self.clip_monitor_manager.refresh_preferences()
-        else:
-            if self.clip_monitor_manager.is_running():
-                self.clip_monitor_manager.stop(persist_disabled=False)
 
     def set_plugin_enabled(self, plugin_id: str, enabled: bool) -> None:
         if is_system_component(plugin_id):

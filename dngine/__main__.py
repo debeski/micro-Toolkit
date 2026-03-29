@@ -40,7 +40,7 @@ def _suppress_macos_dock_icon() -> None:
 # ── Early dock-icon suppression for background sub-processes ──────────
 # This MUST run before any PySide6 import, because importing PySide6 on
 # macOS initializes NSApplication which immediately creates a dock icon.
-if len(sys.argv) >= 2 and sys.argv[1] in {"clip-monitor", "hotkey-helper", "elevated-broker"}:
+if len(sys.argv) >= 2 and sys.argv[1] in {"hotkey-helper", "elevated-broker"}:
     _suppress_macos_dock_icon()
 
 
@@ -65,4 +65,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

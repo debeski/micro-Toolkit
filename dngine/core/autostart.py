@@ -7,8 +7,7 @@ import sys
 from pathlib import Path
 
 from dngine import APP_NAME, DIST_NAME
-from dngine.core.clip_monitor import build_gui_launch_args
-from dngine.core.runtime_launch import build_background_subcommand_args
+from dngine.core.runtime_launch import build_gui_launch_args
 
 LEGACY_APP_NAME = "Micro Toolkit"
 LEGACY_DIST_NAME = "micro-toolkit"
@@ -19,6 +18,19 @@ LEGACY_MAC_AUTOSTART_LABEL = "com.debeski.microtoolkit"
 class AutostartManager:
     def __init__(self, app_name: str = APP_NAME):
         self.app_name = app_name
+
+    def cleanup_legacy_clip_monitor_entries(self) -> None:
+        if os.name == "nt":
+            for name in self._clip_monitor_registry_names():
+                self._set_registry_enabled(False, name, "")
+            return
+        for path in self._clip_monitor_target_paths():
+            if not path.exists():
+                continue
+            try:
+                path.unlink()
+            except OSError:
+                pass
 
     def is_enabled(self) -> bool:
         if os.name == "nt":
@@ -34,52 +46,27 @@ class AutostartManager:
             self._cleanup_legacy_nt_autostart()
             return None
 
-        target = self._target_path(component="app")
+        target = self._target_path()
         if enabled:
             target.parent.mkdir(parents=True, exist_ok=True)
             self._write_launcher(target, self._launch_command(start_minimized=start_minimized), self._launch_args(start_minimized=start_minimized), label=MAC_AUTOSTART_LABEL)
-        self._cleanup_legacy_targets(component="app", keep_current=enabled)
+        self._cleanup_legacy_targets(keep_current=enabled)
         return target
 
-    def is_clip_monitor_enabled(self) -> bool:
-        if os.name == "nt":
-            return any(self._is_registry_enabled(name) for name in self._registry_names(component="clip_monitor"))
-        return any(path.exists() for path in self._target_paths(component="clip_monitor"))
+    def _target_path(self) -> Path:
+        return self._target_paths()[0]
 
-    def set_clip_monitor_enabled(self, enabled: bool) -> Path | None:
-        if os.name == "nt":
-            command = self._clip_monitor_launch_command()
-            self._set_registry_enabled(enabled, f"{self.app_name} Clip Monitor", command)
-            for legacy_name in self._registry_names(component="clip_monitor")[1:]:
-                self._set_registry_enabled(False, legacy_name, command)
-            return None
-
-        target = self._target_path(component="clip_monitor")
-        if enabled:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            self._write_launcher(
-                target,
-                self._clip_monitor_launch_command(),
-                self._clip_monitor_launch_args(),
-                label=f"{MAC_AUTOSTART_LABEL}.clipmonitor",
-            )
-        self._cleanup_legacy_targets(component="clip_monitor", keep_current=enabled)
-        return target
-
-    def _target_path(self, *, component: str = "app") -> Path:
-        return self._target_paths(component=component)[0]
-
-    def _target_paths(self, *, component: str = "app") -> list[Path]:
+    def _target_paths(self) -> list[Path]:
         home = Path.home()
         paths: list[Path] = []
         if sys.platform.startswith("linux"):
-            current_name = f"{DIST_NAME}.desktop" if component == "app" else f"{DIST_NAME}-clip-monitor.desktop"
-            legacy_name = f"{LEGACY_DIST_NAME}.desktop" if component == "app" else f"{LEGACY_DIST_NAME}-clip-monitor.desktop"
+            current_name = f"{DIST_NAME}.desktop"
+            legacy_name = f"{LEGACY_DIST_NAME}.desktop"
             base = home / ".config" / "autostart"
             paths.extend([base / current_name, base / legacy_name])
         elif sys.platform == "darwin":
-            current_name = f"{MAC_AUTOSTART_LABEL}.plist" if component == "app" else f"{MAC_AUTOSTART_LABEL}.clipmonitor.plist"
-            legacy_name = f"{LEGACY_MAC_AUTOSTART_LABEL}.plist" if component == "app" else f"{LEGACY_MAC_AUTOSTART_LABEL}.clipmonitor.plist"
+            current_name = f"{MAC_AUTOSTART_LABEL}.plist"
+            legacy_name = f"{LEGACY_MAC_AUTOSTART_LABEL}.plist"
             base = home / "Library" / "LaunchAgents"
             paths.extend([base / current_name, base / legacy_name])
         elif os.name == "nt":
@@ -97,9 +84,37 @@ class AutostartManager:
                 seen.add(path)
         return ordered_paths
 
-    def _registry_names(self, *, component: str = "app") -> tuple[str, ...]:
-        current_name = self.app_name if component == "app" else f"{self.app_name} Clip Monitor"
-        legacy_name = LEGACY_APP_NAME if component == "app" else f"{LEGACY_APP_NAME} Clip Monitor"
+    def _clip_monitor_target_paths(self) -> list[Path]:
+        home = Path.home()
+        paths: list[Path] = []
+        if sys.platform.startswith("linux"):
+            base = home / ".config" / "autostart"
+            paths.extend(
+                [
+                    base / f"{DIST_NAME}-clip-monitor.desktop",
+                    base / f"{LEGACY_DIST_NAME}-clip-monitor.desktop",
+                ]
+            )
+        elif sys.platform == "darwin":
+            base = home / "Library" / "LaunchAgents"
+            paths.extend(
+                [
+                    base / f"{MAC_AUTOSTART_LABEL}.clipmonitor.plist",
+                    base / f"{LEGACY_MAC_AUTOSTART_LABEL}.clipmonitor.plist",
+                ]
+            )
+        return paths
+
+    def _registry_names(self) -> tuple[str, ...]:
+        current_name = self.app_name
+        legacy_name = LEGACY_APP_NAME
+        if current_name == legacy_name:
+            return (current_name,)
+        return current_name, legacy_name
+
+    def _clip_monitor_registry_names(self) -> tuple[str, ...]:
+        current_name = f"{self.app_name} Clip Monitor"
+        legacy_name = f"{LEGACY_APP_NAME} Clip Monitor"
         if current_name == legacy_name:
             return (current_name,)
         return current_name, legacy_name
@@ -144,8 +159,8 @@ class AutostartManager:
             except OSError:
                 pass
 
-    def _cleanup_legacy_targets(self, *, component: str, keep_current: bool) -> None:
-        for index, target in enumerate(self._target_paths(component=component)):
+    def _cleanup_legacy_targets(self, *, keep_current: bool) -> None:
+        for index, target in enumerate(self._target_paths()):
             if keep_current and index == 0:
                 continue
             if not target.exists():
@@ -199,12 +214,6 @@ class AutostartManager:
 
     def _launch_command(self, *, start_minimized: bool) -> str:
         return " ".join(shlex.quote(part) for part in self._launch_args(start_minimized=start_minimized))
-
-    def _clip_monitor_launch_args(self) -> list[str]:
-        return build_background_subcommand_args("clip-monitor")
-
-    def _clip_monitor_launch_command(self) -> str:
-        return " ".join(shlex.quote(part) for part in self._clip_monitor_launch_args())
 
     def _mac_bundle_path(self) -> Path | None:
         if sys.platform != "darwin" or not getattr(sys, "frozen", False):

@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 import os
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QApplication
 
@@ -80,17 +80,24 @@ def launch_gui(*, initial_plugin_id: str | None = None, start_minimized: bool = 
 
     window = DNgineWindow(services, initial_plugin_id=initial_plugin_id)
     window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, False)
-    window.show()
     should_start_minimized = False if force_visible else (start_minimized or bool(services.config.get("start_minimized")))
-    if should_start_minimized:
-        if services.tray_manager.can_hide_to_tray():
-            window.hide()
-        else:
-            window.showMinimized()
-    elif force_visible:
-        window.showNormal()
-        window.raise_()
-        window.activateWindow()
+
+    def _show_window() -> None:
+        if should_start_minimized:
+            if services.tray_manager.can_hide_to_tray():
+                window.hide()
+            else:
+                window.showMinimized()
+            return
+        if force_visible:
+            window.showNormal()
+            window.raise_()
+            window.activateWindow()
+            return
+        window.show()
+
+    window.ensurePolished()
+    QTimer.singleShot(0, _show_window)
     return app.exec()
 
 

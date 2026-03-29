@@ -10,8 +10,6 @@ from dngine.core.storage_paths import DATABASE_FILENAME, LEGACY_DATABASE_FILENAM
 
 DEFAULT_CONFIG = {
     "clip_monitor_enabled": True,
-    "minimize_to_tray": False,
-    "close_to_tray": False,
     "confirm_on_exit": True,
     "run_on_startup": False,
     "start_minimized": False,
@@ -42,8 +40,6 @@ DEFAULT_CONFIG = {
 
 _BOOL_KEYS = {
     "clip_monitor_enabled",
-    "minimize_to_tray",
-    "close_to_tray",
     "confirm_on_exit",
     "run_on_startup",
     "start_minimized",

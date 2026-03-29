@@ -196,9 +196,10 @@ class ClipboardQuickPanel(QWidget):
 
 
 class ClipboardQuickPanelController(QObject):
-    def __init__(self, services):
+    def __init__(self, services, *, before_restore_callback=None):
         super().__init__()
         self.services = services
+        self.before_restore_callback = before_restore_callback
         self._panel: ClipboardQuickPanel | None = None
 
     def toggle(self) -> None:
@@ -209,6 +210,7 @@ class ClipboardQuickPanelController(QObject):
         self._panel = ClipboardQuickPanel(
             self.services,
             open_full_callback=self._open_full_clipboard,
+            before_restore_callback=self.before_restore_callback,
         )
         return self._panel
 

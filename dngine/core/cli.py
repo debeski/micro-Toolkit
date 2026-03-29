@@ -4,7 +4,6 @@ import argparse
 import json
 
 from dngine import APP_NAME
-from dngine.core.clip_monitor import build_clip_monitor_parser, run_clip_monitor_service
 from dngine.core.elevated_broker import build_elevated_broker_parser, run_elevated_broker_service
 from dngine.core.hotkey_helper import build_helper_parser, run_hotkey_helper_service
 from dngine.core.services import AppServices
@@ -65,7 +64,6 @@ def build_parser() -> argparse.ArgumentParser:
     broker_run.add_argument("--payload", default="{}", help="JSON object payload")
 
     build_helper_parser(subparsers)
-    build_clip_monitor_parser(subparsers)
     build_elevated_broker_parser(subparsers)
 
     return parser
@@ -162,9 +160,6 @@ def execute_cli(args) -> int:
 
     if args.command == "hotkey-helper":
         return run_hotkey_helper_service(args)
-
-    if args.command == "clip-monitor":
-        return run_clip_monitor_service(args)
 
     if args.command == "elevated-broker":
         return run_elevated_broker_service(args)
