@@ -8,7 +8,7 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from dngine.core.builtin_manifest import load_builtin_manifest, sha256_file
+from dngine.core.builtin_manifest import load_builtin_manifest, sha256_file, verify_manifest_integrity
 from dngine.core.plugin_api import QtPlugin
 from dngine.core.plugin_security import scan_plugin_path
 
@@ -318,6 +318,11 @@ class PluginManager:
             if self.builtin_manifest_path is not None
             else {}
         )
+        self._manifest_integrity_ok = True
+        if self.enforce_builtin_manifest and self.builtin_manifest_path is not None:
+            if not verify_manifest_integrity(self.builtin_manifest_path):
+                self._builtin_manifest = {}
+                self._manifest_integrity_ok = False
         self._specs: list[PluginSpec] | None = None
         self._instances: dict[str, QtPlugin] = {}
 
@@ -325,6 +330,12 @@ class PluginManager:
         self._specs = None
         if self.builtin_manifest_path is not None:
             self._builtin_manifest = load_builtin_manifest(self.builtin_manifest_path)
+            if self.enforce_builtin_manifest:
+                if not verify_manifest_integrity(self.builtin_manifest_path):
+                    self._builtin_manifest = {}
+                    self._manifest_integrity_ok = False
+                else:
+                    self._manifest_integrity_ok = True
         if clear_instances:
             self._instances = {}
 
@@ -465,7 +476,9 @@ class PluginManager:
                 continue
             effective_source_type = source_type
             scan_report = None
-            if source_type == "builtin" and self.enforce_builtin_manifest and self._builtin_manifest:
+            if source_type == "builtin" and self.enforce_builtin_manifest:
+                if not self._manifest_integrity_ok or not self._builtin_manifest:
+                    continue
                 relative_path = str(file_path.relative_to(root)).replace("\\", "/")
                 manifest_entry = self._builtin_manifest.get(relative_path)
                 if manifest_entry is None:
