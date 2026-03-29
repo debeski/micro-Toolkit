@@ -941,6 +941,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Ver. | Date | Highlights |
 | --- | --- | --- |
+| 0.8.3 | 2026-03-29 | Refined the macOS `Clip-Monitor` launch behavior again so the main app keeps its normal Dock presence while the monitor remains background-only instead of creating an extra Dock icon. |
 | 0.8.2 | 2026-03-29 | Fixed macOS dock showing a second app icon for the `Clip-Monitor` background process by suppressing the dock icon via `NSApplication` activation policy before the monitor's `QApplication` is created. |
 | 0.8.1 | 2026-02-29 | **REBRANDED** from Micro-Toolkit to DNgine, published first beta release to PyPI, and github, Added built-in plugins manifest hash check on runtime. |
 | 0.8.0 | 2026-03-28 | Introduced the zero-boilerplate UI system: shared four-level shell surfaces (`base_bg`, `component_bg`, `card_bg`, `element_bg`), shared semantic classes for standard and special surfaces, widespread plugin migration to `bind_tr(...)`, `tr(...)`, `safe_tr(...)`, and `apply_page_chrome(...)`, a new app-wide top-bar search dropdown that navigates directly to plugins and `Command Center` sections, and unified shell-owned loading/progress feedback through the top-bar spinner, busy cursor, and status-bar progress bar, Global Cairo font usage. |
