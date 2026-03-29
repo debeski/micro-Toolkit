@@ -15,6 +15,39 @@ from dngine.core.services import AppServices
 _WIN_MUTEX = None
 
 
+def _restore_macos_dock_icon() -> None:
+    if sys.platform != "darwin":
+        return
+    try:
+        import objc  # type: ignore[import-untyped]
+        from AppKit import NSApplication, NSApplicationActivationPolicyRegular  # type: ignore[import-untyped]
+
+        NSApplication.sharedApplication().setActivationPolicy_(NSApplicationActivationPolicyRegular)
+        return
+    except Exception:
+        pass
+    try:
+        import ctypes
+        import ctypes.util
+
+        objc_lib = ctypes.cdll.LoadLibrary(ctypes.util.find_library("objc") or "/usr/lib/libobjc.dylib")
+        objc_lib.objc_getClass.restype = ctypes.c_void_p
+        objc_lib.objc_getClass.argtypes = [ctypes.c_char_p]
+        objc_lib.sel_registerName.restype = ctypes.c_void_p
+        objc_lib.sel_registerName.argtypes = [ctypes.c_char_p]
+        objc_lib.objc_msgSend.restype = ctypes.c_void_p
+        objc_lib.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p]
+        nsapp_cls = objc_lib.objc_getClass(b"NSApplication")
+        shared_sel = objc_lib.sel_registerName(b"sharedApplication")
+        ns_app = objc_lib.objc_msgSend(nsapp_cls, shared_sel)
+        policy_sel = objc_lib.sel_registerName(b"setActivationPolicy:")
+        objc_lib.objc_msgSend.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]
+        ns_application_activation_policy_regular = 0
+        objc_lib.objc_msgSend(ns_app, policy_sel, ns_application_activation_policy_regular)
+    except Exception:
+        pass
+
+
 def launch_gui(*, initial_plugin_id: str | None = None, start_minimized: bool = False, force_visible: bool = False) -> int:
     global _WIN_MUTEX
     if os.name == "nt":
@@ -30,6 +63,7 @@ def launch_gui(*, initial_plugin_id: str | None = None, start_minimized: bool = 
     app.setOrganizationName("Debeski")
     app.setStyle("Fusion")
     app.setQuitOnLastWindowClosed(True)
+    _restore_macos_dock_icon()
 
     services = AppServices()
     services.attach_application(app)
