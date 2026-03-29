@@ -67,8 +67,29 @@ exe = EXE(
     icon=exe_icon,
 )
 
+# macOS background subcommands are launched through this helper so they do not
+# come up as a second Dock-visible GUI app instance.
+helper_exe = EXE(
+    pyz,
+    a.scripts,
+    [],
+    exclude_binaries=True,
+    name="dngine-helper",
+    debug=False,
+    bootloader_ignore_signals=False,
+    strip=False,
+    upx=False,
+    console=True,
+    disable_windowed_traceback=False,
+    argv_emulation=False,
+    target_arch=None,
+    codesign_identity=None,
+    entitlements_file=None,
+)
+
 coll = COLLECT(
     exe,
+    helper_exe,
     a.binaries,
     a.zipfiles,
     a.datas,

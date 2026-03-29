@@ -32,7 +32,7 @@ echo "Cleaning previous build artifacts..."
 rm -rf build dist
 
 echo "Building macOS app bundle..."
-python -m PyInstaller --noconfirm --clean dngine.spec
+python -m PyInstaller --noconfirm --clean dngine_macos.spec
 
 deactivate
 echo "Build complete: dist/DNgine.app"
