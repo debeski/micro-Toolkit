@@ -29,7 +29,7 @@ The app is intentionally desktop-first. It is not a browser wrapper, and it is n
 - Shell-owned top-bar visual refresh spinner, busy cursor, and status-bar task progress
 - Standardized per-user runtime storage across Windows, macOS, and Linux
 - Tray integration for all-day companion use
-- Persistent `Clip-Monitor` companion so clipboard capture can stay alive after the main window closes
+- Integrated `Clip-Monitor` clipboard capture that stays active while DNgine is hidden in the tray without spawning a second app instance
 - Dashboard shell with a workspace pulse panel, usage snapshots, and recent activity
 - Settings support for default output path and default startup page selection
 - Workflow engine and CLI command surface
@@ -156,6 +156,7 @@ python -m dngine workflows run my_workflow
 - Batch File Renamer
 - Smart File Organizer
 - Disk Space Visualizer
+- Hash Checker
 
 ### IT Utilities
 
@@ -194,7 +195,8 @@ python -m dngine workflows run my_workflow
 - Restores entries back to the system clipboard in their original supported format
 - Supports labels, categories, pinned snippets, quick history access, persistent local storage, and an integrated background `Clip-Monitor`
 - Pinned entries stay above normal history and are not removed when non-pinned history is trimmed
-- When `Clip-Monitor` is enabled, clipboard capture continues while DNgine is hidden in the tray, and the quick panel stays owned by the main app
+- Supports entry editing, text transforms, merge-and-copy, and sequential paste queue workflows for selected items
+- When `Clip-Monitor` is enabled, clipboard capture continues while DNgine is hidden in the tray, and the quick panel stays owned by the main app instead of a second clipboard app instance
 
 ### Folder Mapper
 
@@ -217,6 +219,16 @@ python -m dngine workflows run my_workflow
 
 - Audits filenames referenced in an Excel workbook against one or more source folders
 - Can optionally move confirmed matches into a destination structure while exporting missing-value and missing-file reports
+
+### Hash Checker
+
+- Calculates `MD5` and `SHA-256` for a selected file
+- Verifies a pasted checksum against the selected file and lets you copy either generated hash back to the clipboard
+
+### Code Exploit Scanner
+
+- Scans folders for exposed secrets, risky filenames, and exploit indicators across common text-based source and config files
+- Masks matched secrets in previews, flags risky files for manual review, and writes a review report beside the scanned folder when suspicious findings are detected
 
 ### System Overview
 
@@ -941,9 +953,10 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Ver. | Date | Highlights |
 | --- | --- | --- |
+| 0.8.4 | 2026-03-29 | Stability pass for clipboard workflows: removed the second clipboard app instance by folding `Clip-Monitor` fully into the main app, kept the quick panel under main-app ownership, added the new `Hash Checker` utility for `MD5` / `SHA-256` calculation and checksum verification, improved `Code Exploit Scanner` with broader secret and risky-file detection plus masked previews and review-report output, and expanded `Clip Snip` with edit, transform, merge, and queued-paste actions. |
 | 0.8.3 | 2026-03-29 | Simplified clipboard monitoring back into the main app: `X` now always hides DNgine to the tray, `Exit` from the tray is the only real app shutdown path with confirmation, the quick clipboard panel returned to main-app ownership, and `Clip-Monitor` no longer runs as a separate tray-owning app instance. |
 | 0.8.2 | 2026-03-29 | Fixed macOS dock showing a second app icon for the `Clip-Monitor` background process by suppressing the dock icon via `NSApplication` activation policy before the monitor's `QApplication` is created. |
-| 0.8.1 | 2026-02-29 | **REBRANDED** from Micro-Toolkit to DNgine, published first beta release to PyPI, and github, Added built-in plugins manifest hash check on runtime. |
+| 0.8.1 | 2026-03-29 | **REBRANDED** from Micro-Toolkit to DNgine, published first beta release to PyPI and GitHub, and added built-in plugin manifest hash verification at runtime. |
 | 0.8.0 | 2026-03-28 | Introduced the zero-boilerplate UI system: shared four-level shell surfaces (`base_bg`, `component_bg`, `card_bg`, `element_bg`), shared semantic classes for standard and special surfaces, widespread plugin migration to `bind_tr(...)`, `tr(...)`, `safe_tr(...)`, and `apply_page_chrome(...)`, a new app-wide top-bar search dropdown that navigates directly to plugins and `Command Center` sections, and unified shell-owned loading/progress feedback through the top-bar spinner, busy cursor, and status-bar progress bar, Global Cairo font usage. |
 | 0.7.8 | 2026-03-27 | Finished the compact icon-button stabilization pass across the shell and plugins, separating lightweight auto-raise action icons from regular buttons so hover states no longer inflate rows, distort compact containers, or overflow shell utility bars and table action cells. |
 | 0.7.7 | 2026-03-27 | Reworked the compact shell chrome so the utility bar, system-icon rail, and header rhythm align more cleanly, while also tightening `Dev Lab` card layout and the overall top-shell proportions. |
