@@ -26,6 +26,7 @@ datas += collect_tree("dngine/i18n")
 datas += collect_tree("dngine/plugins")
 
 hiddenimports = collect_submodules("dngine.plugins")
+hiddenimports += collect_submodules("dngine.core")
 hiddenimports += collect_submodules("pip")
 
 icon_path = project_root / "app.ico"

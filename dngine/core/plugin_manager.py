@@ -326,6 +326,17 @@ class PluginManager:
         self._specs: list[PluginSpec] | None = None
         self._instances: dict[str, QtPlugin] = {}
 
+    @staticmethod
+    def _import_module(spec_obj, module_name: str):
+        module = importlib.util.module_from_spec(spec_obj)
+        sys.modules[module_name] = module
+        try:
+            spec_obj.loader.exec_module(module)
+        except Exception:
+            sys.modules.pop(module_name, None)
+            raise
+        return module
+
     def invalidate_cache(self, *, clear_instances: bool = False) -> None:
         self._specs = None
         if self.builtin_manifest_path is not None:
@@ -454,11 +465,13 @@ class PluginManager:
 
         module = sys.modules.get(spec.module_name)
         if module is None:
-            module = importlib.util.module_from_spec(spec_obj)
-            sys.modules[spec.module_name] = module
-            spec_obj.loader.exec_module(module)
+            module = self._import_module(spec_obj, spec.module_name)
 
         plugin_class = getattr(module, spec.class_name, None)
+        if plugin_class is None or not inspect.isclass(plugin_class) or not issubclass(plugin_class, QtPlugin):
+            sys.modules.pop(spec.module_name, None)
+            module = self._import_module(spec_obj, spec.module_name)
+            plugin_class = getattr(module, spec.class_name, None)
         if plugin_class is None or not inspect.isclass(plugin_class) or not issubclass(plugin_class, QtPlugin):
             raise ImportError(f"Invalid plugin class for '{plugin_id}'")
 

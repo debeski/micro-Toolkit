@@ -474,6 +474,12 @@ class AppServices(QObject):
     def show_clipboard_quick_panel(self) -> bool:
         if self.main_window is None:
             return False
+        self.clipboard_quick_panel.show()
+        return True
+
+    def toggle_clipboard_quick_panel(self) -> bool:
+        if self.main_window is None:
+            return False
         self.clipboard_quick_panel.toggle()
         return True
 
@@ -864,7 +870,7 @@ class AppServices(QObject):
 
     def _toggle_clipboard_quick_panel(self):
         self._require_window()
-        self.show_clipboard_quick_panel()
+        self.toggle_clipboard_quick_panel()
         return {"visible": True}
 
     def _restart_elevated(self):

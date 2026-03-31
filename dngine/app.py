@@ -1697,7 +1697,7 @@ class DNgineWindow(QMainWindow):
             "show_clipboard_quick_panel",
             "Quick clipboard history",
             "Ctrl+Alt+V",
-            self.services.show_clipboard_quick_panel,
+            self.services.toggle_clipboard_quick_panel,
             default_scope="global",
         )
         self.services.shortcut_manager.register_action("toggle_activity", "Toggle activity panel", "F12", self.toggle_activity_dock)

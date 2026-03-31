@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QObject, QPoint, Qt
+import sys
+
+from PySide6.QtCore import QEvent, QObject, QPoint, QTimer, Qt
 from PySide6.QtGui import QCursor, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -35,6 +37,10 @@ class ClipboardQuickPanel(QWidget):
         self.before_restore_callback = before_restore_callback
         self._drag_offset: QPoint | None = None
         self._manual_position: QPoint | None = None
+        self._auto_hide_guard_active = False
+        self._auto_hide_guard_timer = QTimer(self)
+        self._auto_hide_guard_timer.setSingleShot(True)
+        self._auto_hide_guard_timer.timeout.connect(self._clear_auto_hide_guard)
         self.setObjectName("ClipboardQuickPanel")
         self.resize(430, 330)
         self._build_ui()
@@ -146,14 +152,15 @@ class ClipboardQuickPanel(QWidget):
         if self.isVisible():
             self.hide()
             return
+        self.show_panel()
+
+    def show_panel(self) -> None:
         self.refresh_ui()
         self._refresh_entries()
         self._move_to_anchor()
+        self._arm_auto_hide_guard()
         self.show()
-        self.raise_()
-        self.activateWindow()
-        self.search_input.setFocus()
-        self.search_input.selectAll()
+        QTimer.singleShot(0, self._finalize_show)
 
     def _refresh_entries(self) -> None:
         search = self.search_input.text().strip()
@@ -229,7 +236,11 @@ class ClipboardQuickPanel(QWidget):
 
     def focusOutEvent(self, event) -> None:
         super().focusOutEvent(event)
-        self.hide()
+        self._hide_if_allowed()
+
+    def hideEvent(self, event) -> None:
+        self._clear_auto_hide_guard()
+        super().hideEvent(event)
 
     def mousePressEvent(self, event) -> None:
         if event.button() == Qt.MouseButton.LeftButton and self._drag_allowed(event.position().toPoint()):
@@ -258,7 +269,7 @@ class ClipboardQuickPanel(QWidget):
         if not self.isVisible():
             return super().eventFilter(watched, event)
         if event.type() in {QEvent.Type.ApplicationDeactivate, QEvent.Type.WindowDeactivate}:
-            self.hide()
+            self._hide_if_allowed()
             return super().eventFilter(watched, event)
         if event.type() == QEvent.Type.MouseButtonPress:
             global_pos = None
@@ -273,8 +284,32 @@ class ClipboardQuickPanel(QWidget):
                 except Exception:
                     global_pos = None
             if global_pos is not None and not self.rect().contains(self.mapFromGlobal(global_pos)):
-                self.hide()
+                self._hide_if_allowed()
         return super().eventFilter(watched, event)
+
+    def _finalize_show(self) -> None:
+        if not self.isVisible():
+            return
+        self.raise_()
+        self.activateWindow()
+        self.search_input.setFocus(Qt.FocusReason.ActiveWindowFocusReason)
+        self.search_input.selectAll()
+
+    def _arm_auto_hide_guard(self) -> None:
+        self._clear_auto_hide_guard()
+        if sys.platform != "darwin":
+            return
+        self._auto_hide_guard_active = True
+        self._auto_hide_guard_timer.start(180)
+
+    def _clear_auto_hide_guard(self) -> None:
+        self._auto_hide_guard_active = False
+        self._auto_hide_guard_timer.stop()
+
+    def _hide_if_allowed(self) -> None:
+        if self._auto_hide_guard_active:
+            return
+        self.hide()
 
     def _drag_allowed(self, point: QPoint) -> bool:
         child = self.childAt(point)
@@ -359,6 +394,10 @@ class ClipboardQuickPanelController(QObject):
     def toggle(self) -> None:
         panel = self._panel or self._create_panel()
         panel.toggle()
+
+    def show(self) -> None:
+        panel = self._panel or self._create_panel()
+        panel.show_panel()
 
     def _create_panel(self) -> ClipboardQuickPanel:
         self._panel = ClipboardQuickPanel(
