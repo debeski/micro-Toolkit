@@ -25,6 +25,8 @@ dependencies = [
   "python-docx",
   "qt-material",
   "cryptography",
+  "requests",
+  "beautifulsoup4",
 ]
 classifiers = [
   "Programming Language :: Python :: 3",

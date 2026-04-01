@@ -127,6 +127,12 @@ Run a headless tool command:
 python -m dngine commands run tool.doc_bridge.md_to_docx --args '{"markdown_path": "notes.md"}'
 ```
 
+Run the built-in web scraper headlessly:
+
+```bash
+python -m dngine commands run tool.web_scraper.run --args '{"url": "https://example.com/articles", "item_selector": "article", "title_selector": "h2", "link_selector": "a[href]", "text_selector": "p", "max_pages": 1}'
+```
+
 Run a saved workflow:
 
 ```bash
@@ -142,6 +148,7 @@ python -m dngine workflows run my_workflow
 - Deep-Scan Auditor
 - Sequence Auditor
 - Data-Link Auditor
+- Web Scraper
 
 ### Office Utilities
 
@@ -225,6 +232,13 @@ python -m dngine workflows run my_workflow
 
 - Calculates `MD5` and `SHA-256` for a selected file
 - Verifies a pasted checksum against the selected file and lets you copy either generated hash back to the clipboard
+
+### Web Scraper
+
+- Scrapes public static HTML pages only; it is not intended for login flows or JavaScript-rendered sites
+- Uses CSS selectors for items, titles, links, text, and optional pagination
+- Shows extracted rows in-app first with table filtering, detail previews, and right-click copy/open/export actions
+- Can optionally export visible results as `JSON` or `CSV`
 
 ### Code Exploit Scanner
 
@@ -954,6 +968,7 @@ It is not a monolithic enterprise suite. It is a personal productivity and utili
 
 | Ver. | Date | Highlights |
 | --- | --- | --- |
+| 0.8.8 | 2026-04-01 | Added the built-in `Web Scraper` data utility for public static HTML pages with CSS-selector extraction, in-app result tables, detail previews, right-click copy/open/export actions, and a new headless `tool.web_scraper.run` command. Added runtime dependencies `requests` and `beautifulsoup4` for scraping support and updated the setup metadata/docs accordingly. |
 | 0.8.7 | 2026-03-31 | Standardized global drag-and-drop path inputs across plugins utilizing native PathLineEdit and new DroppableListWidget / DroppableTableWidget. Fixed PySide6 QPixmap typing crash when clearing image previews. |
 | 0.8.6 | 2026-03-31 | Added the new `Code Factory` IT utility for folder-based code cleanup and safe-to-share preparation, with grouped toggles for cleanup, comment stripping, sanitization, and pack operations, a preview-before-apply workflow, detailed in-app result rows, drag-and-drop folder targeting, and single-run undo for the latest apply session. Added Global reload button in the header card for the current page. |
 | 0.8.5 | 2026-03-31 | Fixed the `Clip Snip` follow-up stability regressions: frozen builds now bundle plugin-only core helpers such as `clip_edit_dialog`, failed dynamic plugin imports no longer leave behind invalid half-loaded classes, and the macOS tray `Show Quick Panel` flow now reopens the quick clipboard panel reliably after it was dismissed. |

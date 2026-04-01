@@ -16,7 +16,7 @@
       ]
     },
     "data_tools/data_link_auditor.py": {
-      "sha256": "4f0c75482fa73fdb9763289910feacffc241d6947d01d6acdb11bb72438196e8",
+      "sha256": "8bc8ab545e9e3649683935b272cdf018cde17d965b4418321c894432a06c612b",
       "plugins": [
         {
           "plugin_id": "data_link_auditor",
@@ -25,7 +25,7 @@
       ]
     },
     "data_tools/deep_scan_auditor.py": {
-      "sha256": "1a1f1d6f6f989238fce6fb66fc4f7649644cf9d4ce908dd3432f5c3bf7b68df5",
+      "sha256": "a44227228e2cb503185525b7a542c11dfca38a500f2644eb2510d1ded4ccd9f6",
       "plugins": [
         {
           "plugin_id": "deep_scan_auditor",
@@ -34,7 +34,7 @@
       ]
     },
     "data_tools/folder_mapper.py": {
-      "sha256": "72ed58f021402728eb212d26761edea05e44888f3c2851b613db3903e22ff50a",
+      "sha256": "7502c632bcd27dff3672111119c1df1416386d5f69ea6a1dd7ba621c823fd9d6",
       "plugins": [
         {
           "plugin_id": "folder_mapper",
@@ -43,7 +43,7 @@
       ]
     },
     "data_tools/sequence_auditor.py": {
-      "sha256": "c249445588162055e7b1bb4b8cdebe720fd13ea657f8e7cf8bfd1adba7d6bda4",
+      "sha256": "a1fefe8d8c7560e70441679cc3a36e7000918456cc7e9da9966bbfb8f4e58df9",
       "plugins": [
         {
           "plugin_id": "sequence_auditor",
@@ -51,8 +51,17 @@
         }
       ]
     },
+    "data_tools/web_scraper.py": {
+      "sha256": "612d67dbeeab096a26b2b6cbf578a17a9dfd0420d3e11c3c8856e8bd1015bf09",
+      "plugins": [
+        {
+          "plugin_id": "web_scraper",
+          "class_name": "WebScraperPlugin"
+        }
+      ]
+    },
     "file_tools/batch_renamer.py": {
-      "sha256": "a868104553e4ac8f56aeaf114080b0b1cff43abe6628d0c4073990548728fb6b",
+      "sha256": "ff37217dd33022168a0dbcfb83b7da9b19f4222ce1ac994014f9cdbb871d31ee",
       "plugins": [
         {
           "plugin_id": "batch_renamer",
@@ -61,7 +70,7 @@
       ]
     },
     "file_tools/deep_searcher.py": {
-      "sha256": "b86452180f56f47145a2e52374fdeb7a8a30ee0ee16318c50ba9ae6bdae1a288",
+      "sha256": "899106a09e62579c202015f8858b2de76b4ebe9f1b0615fc4c4e78335b108122",
       "plugins": [
         {
           "plugin_id": "deep_searcher",
@@ -70,7 +79,7 @@
       ]
     },
     "file_tools/hash_checker.py": {
-      "sha256": "c6b3d5e983cac3ebdd6d416c4297f64c6a822bdcd64375f4945346619ff995aa",
+      "sha256": "c14bbc4d02227cce70473f299772b8059650f00db64351ab001d7f0183e16c80",
       "plugins": [
         {
           "plugin_id": "hash_checker",
@@ -79,7 +88,7 @@
       ]
     },
     "file_tools/smart_organizer.py": {
-      "sha256": "16599ad121f91f04517c85a74e3a85587819e8215305e3ccf548251fcc54d392",
+      "sha256": "3e291d039721edb0f3796e55904e68c0b4632d0ca8edd3e3ea60a36d335bf2ac",
       "plugins": [
         {
           "plugin_id": "smart_org",
@@ -88,7 +97,7 @@
       ]
     },
     "file_tools/usage_analyzer.py": {
-      "sha256": "9b0dc63442e0b71648cf43346ef9f279e3306debef04b6211d8f4f3dfe408cc9",
+      "sha256": "3604e0c840e4cdce51a0f3d654f6de3564942782331ce0b83d102c61c8442d52",
       "plugins": [
         {
           "plugin_id": "usage_analyzer",
@@ -97,7 +106,7 @@
       ]
     },
     "it_tools/code_factory.py": {
-      "sha256": "303942184946af00d2a61bc5f7f4f6b57d01c87e597b630c6cc4a0fbb4a1952b",
+      "sha256": "166026ab96329e9d95aff9371d69de8752d1fef46722e2c5766aa67ce48ec595",
       "plugins": [
         {
           "plugin_id": "code_factory",
@@ -106,7 +115,7 @@
       ]
     },
     "it_tools/credential_scanner.py": {
-      "sha256": "713f046398741ab94550ab136e9e144126e48c53ef10b644fc34979dc90d650f",
+      "sha256": "34886d52da6d945a98cf7b654a57457ad3273361f8cc6adbbb5236bee6e6bbf0",
       "plugins": [
         {
           "plugin_id": "cred_scanner",
@@ -124,7 +133,7 @@
       ]
     },
     "it_tools/privacy_shredder.py": {
-      "sha256": "df2281bdbda085f489a82769a99743184312049ef08ed936c310007e03c0087c",
+      "sha256": "8f9d940e434a1656eb763cc7f4795ab301e99d1e934ab25227e4731396bc78f1",
       "plugins": [
         {
           "plugin_id": "privacy_shred",
@@ -160,7 +169,7 @@
       ]
     },
     "media_tools/image_tagger.py": {
-      "sha256": "15508f0510ba60b950334457ddde3e6403fb156f5728c88e48f0c2f3adae740c",
+      "sha256": "84a2994d49850149977d72c574ff1d90d0af5f681a1c49057c4f0abd83b1d11d",
       "plugins": [
         {
           "plugin_id": "tagger",
@@ -169,7 +178,7 @@
       ]
     },
     "media_tools/image_transformer.py": {
-      "sha256": "4f1a6d9e39876f96a72f536d1402a8c2199e84b9c3f3a598acb37b26d0652ee4",
+      "sha256": "a70da6f0f7c787c43c26bab1b8281e7bc0315fdcf2bdf9642c85f46a5e46f778",
       "plugins": [
         {
           "plugin_id": "img_trans",
@@ -178,7 +187,7 @@
       ]
     },
     "office_tools/cross_joiner.py": {
-      "sha256": "098f9491b16072c1f088ae950b7225cfe9e09631df67f481c03f347c3bd3ae0e",
+      "sha256": "cd7cb5a8746a693458e7e1e8c68a213cc6854b3029b7bfd80b8c90bb0a6d73b3",
       "plugins": [
         {
           "plugin_id": "cross_joiner",
@@ -187,7 +196,7 @@
       ]
     },
     "office_tools/data_cleaner.py": {
-      "sha256": "f9ea67b2125d8609b2054743311b6a27b1c2de336638822bb673b606dea7b50b",
+      "sha256": "aa3952c07db3040d6e816dd6381e52650ed656d3e624b0dd30e7cf5a95f9ad58",
       "plugins": [
         {
           "plugin_id": "cleaner",
@@ -196,7 +205,7 @@
       ]
     },
     "office_tools/document_bridge.py": {
-      "sha256": "be21a36311223eab76cac1ed069c9e2efb592295b98471a19153753d6fc90549",
+      "sha256": "a31db42f3f30921b06f47969298c1c32653d8f2c0c288ce89514cf858c55ab35",
       "plugins": [
         {
           "plugin_id": "doc_bridge",
@@ -205,7 +214,7 @@
       ]
     },
     "office_tools/pdf_suite.py": {
-      "sha256": "3b6ec2b2576e2e3d9b5aa2a0b81139e48911c01edfa213debc5a10c2607f2453",
+      "sha256": "462c7003c3574a06ef29d712ad4114e7e290f8310520fbb5df753972e6336e60",
       "plugins": [
         {
           "plugin_id": "pdf_suite",
@@ -232,7 +241,7 @@
       ]
     },
     "system/command_center.py": {
-      "sha256": "a151ec44ca21b78f7ec666ca39370ab696a43b2d4ae4b3dbcbc5978538d58e90",
+      "sha256": "7a1bc667382fca2328d74018e90fae095f46cf0e345d5a2068df0e3a216b9505",
       "plugins": [
         {
           "plugin_id": "command_center",

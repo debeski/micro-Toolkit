@@ -10,3 +10,5 @@ psutil
 python-docx
 qt-material
 cryptography
+requests
+beautifulsoup4
