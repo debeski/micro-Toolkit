@@ -76,12 +76,30 @@ sudo apt-get install -y libxcb-cursor0
 
 #### Setup
 
+PowerShell on Windows:
+
+```powershell
+git clone https://github.com/debeski/dngine.git
+cd dngine
+py -m venv venv
+.\venv\Scripts\Activate.ps1
+python -m pip install -r requirements.txt
+```
+
+If PowerShell blocks activation, you can use the venv interpreter directly instead:
+
+```powershell
+.\venv\Scripts\python.exe -m pip install -r requirements.txt
+```
+
+macOS / Linux:
+
 ```bash
 git clone https://github.com/debeski/dngine.git
 cd dngine
 python3 -m venv venv
 source venv/bin/activate
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
 Packaged builds should also regenerate the first-party package catalog and builtin manifest before running `PyInstaller`:
@@ -104,6 +122,12 @@ Launch the desktop app:
 
 ```bash
 python -m dngine
+```
+
+On Windows PowerShell, if you prefer calling the venv interpreter directly:
+
+```powershell
+.\venv\Scripts\python.exe -m dngine
 ```
 
 Launch directly into GUI mode:
