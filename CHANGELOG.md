@@ -2,6 +2,7 @@
 
 ## 0.10.0 - 2026-04-05
 
+- **Build & release automation**: Added GitHub Actions CI/CD — Windows (PyInstaller onedir + Inno Setup installer), Linux (`.deb` + wheel/sdist via `build_linux.sh`), and macOS (`.app`) builds. Tag-driven (`v*`) releases verify `tag == dngine/VERSION` and publish all artifacts to a GitHub Release.
 - Added the strict `dngine.sdk` groundwork for future plugin migration, including standard plugin bases, declarative page/task/command specs, shared context-menu helpers, and global translation/direction helpers.
 - Added plugin contract classification so legacy plugins are explicitly marked non-standard for audit and migration work.
 - Restructured documentation toward a root `README.md` entrypoint plus a dedicated `docs/` tree.
