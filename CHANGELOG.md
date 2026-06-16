@@ -1,35 +1,5 @@
 # Changelog
 
-## 2.0.0a2 - 2026-04-07 (Project-R)
-
-- **CLI command contract**: Plugins declare `commands = [Command(...)]` alongside their `page` dict; engine collects them into a central `CommandRegistry` for workflows and headless access.
-- **Embedded Terminal**: Real shell (bash/zsh/cmd) via QProcess, Tokyo Night colour scheme, command history (Up/Down), ANSI stripping, Ctrl+C passthrough, auto-restart on exit.
-- **Activity Console**: Dark-themed log viewer capturing all `dngine.*` logger output with colour-coded levels (info/warn/error).
-- **Bottom Panel**: Terminal + Console in a tabbed, resizable split at the bottom of the shell, toggleable via `Ctrl+\`` shortcut.
-- **Workflows system plugin**: JSON-based workflow editor — create named sequences of registered commands, save/load/delete, sequential execution with per-step error reporting.
-- **Plugin Manager system plugin**: Table of all installed plugins with ID, name, category, description, command count, and detail panel showing declared CLI commands.
-- **Shortcuts system plugin**: Key-capture editor for keyboard shortcuts, bind/remove actions, immediate re-application, persisted to config.
-- **ShortcutManager**: Engine-level manager mapping key sequences → commands, with `QShortcut` application on the shell window.
-- **Engine commands**: `shell.dashboard`, `shell.settings`, `shell.toggle_panel`, `shell.set_theme`, `shell.toggle_dark`, `shell.set_language` registered at boot.
-- 8 system plugins total: Dashboard, Settings, Workflows, Plugin Manager, Shortcuts, About.
-
-## 2.0.0a1 - 2026-04-07 (Project-R)
-
-- **Clean-slate rebuild** of the DNgine plugin engine as `project-r/`.
-- Framework-first architecture: the SDK owns rendering, theming, translation, state, tasks, and lifecycle.
-- Plugins reduced to a simple dict mapping to predefined SDK components (`Text`, `Choice`, `Toggle`, `Numeric`, `Path`, `FileList`, `Table`, `Preview`, `Action`, `Output`, `Separator`, `Group`).
-- Pure Fusion style + palette-driven stylesheet — removed `qt-material` dependency entirely.
-- 5 accent colour families (Pink, Blue, Orange, Green, Red) with auto-computed dark/light variants.
-- Auto-layout renderer: consecutive inputs → settings cards, FileList+Preview → horizontal splitter, actions → button rows.
-- Per-page state machine with bidirectional widget↔state sync, `visible_when`/`enabled_when` rules, debounced preview updates.
-- Background task runner with `ctx.progress()`, `ctx.log()`, `ctx.cancelled` for worker functions.
-- Plugin discovery from `dngine/system/` (always loaded) + `plugins/` (external, file-drop install).
-- Sidecar translations for plugins (`{plugin_stem}.{lang}.json`), RTL/LTR auto-direction.
-- System plugins: Dashboard, Settings (colour picker, dark mode, language, font, output dir), About.
-- 29 automated tests covering components, renderer, runtime wiring, config, theme, i18n, plugin loading, and shell boot.
-- New `Plugin` and `SystemPlugin` base classes as the single public authoring surface.
-- CLI / headless command registration via `sdk/commands.py`.
-
 ## 0.10.0 - 2026-04-05
 
 - Added the strict `dngine.sdk` groundwork for future plugin migration, including standard plugin bases, declarative page/task/command specs, shared context-menu helpers, and global translation/direction helpers.
